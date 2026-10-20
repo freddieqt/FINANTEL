@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="panel-balance" id="panel-balance" class="panel">
+  <div class="sec-hdr">
+    <div><div class="sec-title">Balance General</div><div class="sec-sub">ESTADO DE SITUACIÓN FINANCIERA AL 31/03/2026</div></div>
+    <div class="btns-row">
+      <button class="btn-outline btn-sm" onclick="exportPDF()">📄 PDF</button>
+      <button class="btn-outline btn-sm" onclick="exportExcel()">📊 Excel</button>
+    </div>
+  </div>
+  <div class="two-col">
+    <!-- ACTIVOS -->
+    <div class="card"><div class="card-hdr"><div class="card-title">🔵 ACTIVOS</div></div><div class="card-body-0">
+      <table class="tbl" style="width:100%; table-layout:fixed;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);">
+            <th style="text-align:left; width:15%;">Cta.</th>
+            <th style="text-align:left; width:45%;">Descripción</th>
+            <th style="text-align:right; width:25%; font-family:'IBM Plex Mono',monospace;">S/</th>
+            <th style="text-align:right; width:15%;">%</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-activos"></tbody>
+      </table>
+    </div></div>
+
+    <div>
+      <!-- PASIVOS -->
+      <div class="card" style="margin-bottom:16px;"><div class="card-hdr"><div class="card-title">🔴 PASIVOS</div></div><div class="card-body-0">
+        <table class="tbl" style="width:100%; table-layout:fixed;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left; width:15%;">Cta.</th>
+              <th style="text-align:left; width:45%;">Descripción</th>
+              <th style="text-align:right; width:25%; font-family:'IBM Plex Mono',monospace;">S/</th>
+              <th style="text-align:right; width:15%;">%</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-pasivos"></tbody>
+        </table>
+      </div></div>
+
+      <!-- PATRIMONIO -->
+      <div class="card"><div class="card-hdr"><div class="card-title">🟢 PATRIMONIO</div></div><div class="card-body-0">
+        <table class="tbl" style="width:100%; table-layout:fixed;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left; width:15%;">Cta.</th>
+              <th style="text-align:left; width:45%;">Descripción</th>
+              <th style="text-align:right; width:25%; font-family:'IBM Plex Mono',monospace;">S/</th>
+              <th style="text-align:right; width:15%;">%</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-patrimonio"></tbody>
+        </table>
+      </div></div>
+    </div>
+  </div>
+
+  <div id="balance-alert" style="margin-top:20px;"></div>
+</div>
+</body>
+</html>

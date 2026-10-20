@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="panel-ratios" id="panel-ratios" class="panel">
+  <div class="sec-hdr">
+    <div><div class="sec-title">Ratios Financieros</div><div class="sec-sub">INDICADORES SBS · T1 2026</div></div>
+    <div class="btns-row"><button class="btn-outline btn-sm" onclick="exportPDF()">📄 PDF</button></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="inner-tabs">
+    <button class="itab active" onclick="switchRatioTab('liquidez', this)">💧 Liquidez</button>
+    <button class="itab" onclick="switchRatioTab('rentabilidad', this)">📈 Rentabilidad</button>
+    <button class="itab" onclick="switchRatioTab('cartera', this)">📋 Calidad de Cartera</button>
+    <button class="itab" onclick="switchRatioTab('solvencia', this)">🏦 Solvencia</button>
+    <button class="itab" onclick="switchRatioTab('gestion', this)">⚙️ Gestión</button>
+  </div>
+
+  <!-- TAB: Liquidez -->
+  <div class="ratio-tab" id="rtab-liquidez">
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">💧 Liquidez</div></div>
+      <div class="card-body"><div class="ratio-grid">
+        <div class="ratio-card"><div class="ratio-name">Liquidez Corriente</div><div class="ratio-val" id="r-lc">—</div><div class="ratio-bench">Activo Cte ÷ Pasivo Cte · Meta: >1.5</div><div class="ratio-st" id="s-lc">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Liquidez Absoluta</div><div class="ratio-val" id="r-la">—</div><div class="ratio-bench">Caja ÷ Pasivo Cte · Meta: >0.5</div><div class="ratio-st" id="s-la">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Liquidez MN (SBS)</div><div class="ratio-val" id="r-lmn">—</div><div class="ratio-bench">Activo Líq. MN ÷ Pasivo MN · Mín. SBS: 8%</div><div class="ratio-st" id="s-lmn">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Cobertura Depósitos</div><div class="ratio-val" id="r-cd">—</div><div class="ratio-bench">Disponible ÷ Depósitos · Meta: >20%</div><div class="ratio-st" id="s-cd">Sin datos</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Rentabilidad -->
+  <div class="ratio-tab" id="rtab-rentabilidad" style="display:none">
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">📈 Rentabilidad</div></div>
+      <div class="card-body"><div class="ratio-grid">
+        <div class="ratio-card"><div class="ratio-name">ROA</div><div class="ratio-val" id="r-roa">—</div><div class="ratio-bench">Utilidad ÷ Activo Total · Sector: 1.9%</div><div class="ratio-st" id="s-roa">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">ROE</div><div class="ratio-val" id="r-roe">—</div><div class="ratio-bench">Utilidad ÷ Patrimonio · Sector: 11.5%</div><div class="ratio-st" id="s-roe">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Margen Neto</div><div class="ratio-val" id="r-mn">—</div><div class="ratio-bench">Utilidad ÷ Ingresos · Sector: 8.2%</div><div class="ratio-st" id="s-mn">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Margen Bruto</div><div class="ratio-val" id="r-mb">—</div><div class="ratio-bench">Util. Bruta ÷ Ingresos · Meta: >40%</div><div class="ratio-st" id="s-mb">Sin datos</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Calidad de Cartera -->
+  <div class="ratio-tab" id="rtab-cartera" style="display:none">
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">📋 Calidad de Cartera</div></div>
+      <div class="card-body"><div class="ratio-grid">
+        <div class="ratio-card"><div class="ratio-name">Morosidad</div><div class="ratio-val" id="r-mor" style="color:#fbbf24">—</div><div class="ratio-bench">Créd. Vencidos ÷ Cartera Total · Meta: &lt;5%</div><div class="ratio-st" id="s-mor">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Cobertura</div><div class="ratio-val" id="r-cob">—</div><div class="ratio-bench">Provisiones ÷ Créd. Vencidos · Meta: >50%</div><div class="ratio-st" id="s-cob">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Créditos Castigados</div><div class="ratio-val" id="r-cas">—</div><div class="ratio-bench">Créd. Castigados ÷ Cartera · Sector: 0.8%</div><div class="ratio-st" id="s-cas">Sin datos</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Solvencia -->
+  <div class="ratio-tab" id="rtab-solvencia" style="display:none">
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">🏦 Solvencia</div></div>
+      <div class="card-body"><div class="ratio-grid">
+        <div class="ratio-card"><div class="ratio-name">Endeudamiento Total</div><div class="ratio-val" id="r-et">—</div><div class="ratio-bench">Pasivo ÷ Activo × 100 · Meta: &lt;60%</div><div class="ratio-st" id="s-et">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Deuda / Patrimonio</div><div class="ratio-val" id="r-dp">—</div><div class="ratio-bench">Pasivo ÷ Patrimonio · Meta: &lt;1.5</div><div class="ratio-st" id="s-dp">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Autonomía Financiera</div><div class="ratio-val" id="r-af">—</div><div class="ratio-bench">Patrimonio ÷ Activo × 100 · Meta: >40%</div><div class="ratio-st" id="s-af">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Cobertura de Intereses</div><div class="ratio-val" id="r-ci">—</div><div class="ratio-bench">Util. Operativa ÷ Gastos Fin. · Meta: >2</div><div class="ratio-st" id="s-ci">Sin datos</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Gestión -->
+  <div class="ratio-tab" id="rtab-gestion" style="display:none">
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">⚙️ Gestión y Eficiencia</div></div>
+      <div class="card-body"><div class="ratio-grid">
+        <div class="ratio-card"><div class="ratio-name">Rotación de Activos</div><div class="ratio-val" id="r-ra">—</div><div class="ratio-bench">Ingresos ÷ Activo Total · Meta: >1</div><div class="ratio-st" id="s-ra">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Eficiencia Operativa</div><div class="ratio-val" id="r-eo">—</div><div class="ratio-bench">Gastos Op. ÷ Ingresos × 100 · Meta: &lt;60%</div><div class="ratio-st" id="s-eo">Sin datos</div></div>
+        <div class="ratio-card"><div class="ratio-name">Período Promedio Cobro</div><div class="ratio-val" id="r-ppc">—</div><div class="ratio-bench">días · 365 ÷ (Ing ÷ Ctas Cobrar) · Meta: &lt;30d</div><div class="ratio-st" id="s-ppc">Sin datos</div></div>
+      </div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="panel-costos" id="panel-costos" class="panel">
+  <div class="sec-hdr">
+    <div><div class="sec-title">Costos y Presupuesto</div><div class="sec-sub">EJECUCIÓN PRESUPUESTAL · T1 2026</div></div>
+    <div class="btns-row">
+      <button class="btn-outline btn-sm" onclick="exportPDF()">📄 PDF</button>
+      <button class="btn-outline btn-sm" onclick="exportExcel()">📊 Excel</button>
+    </div>
+  </div>
+
+  <!-- 1. Resumen -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:18px;">
+    <div class="kpi-card"><div class="kpi-lbl">Presupuesto Total</div><div class="kpi-val" id="c-presupuesto">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Total Ejecutado</div><div class="kpi-val" id="c-ejecutado">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Saldo Disponible</div><div class="kpi-val" id="c-saldo">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Ejecución Total</div><div class="kpi-val" id="c-pct">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Estado General</div><div class="kpi-val" id="c-estado" style="font-size:16px">—</div><div class="kpi-d up">—</div></div>
+  </div>
+
+  <!-- 2. Ejecución por centro -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-hdr"><div class="card-title">📊 Ejecución por Centro de Costo</div></div>
+    <div class="card-body-0" style="overflow-x:auto;">
+      <table class="tbl" style="width:100%;">
+        <thead><tr>
+          <th>Centro de Costo</th>
+          <th class="tr">Presupuesto</th>
+          <th class="tr">Ejecutado</th>
+          <th class="tr">Saldo</th>
+          <th class="tr">% Ejec.</th>
+          <th>Estado</th>
+        </tr></thead>
+        <tbody id="tbody-costos"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. Evolución mensual -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-hdr"><div class="card-title">📅 Evolución Mensual</div></div>
+    <div class="card-body">
+      <div class="bar-chart" id="costos-bars"></div>
+    </div>
+  </div>
+
+  <!-- 4. Análisis -->
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">🔍 Análisis Presupuestal</div></div>
+    <div class="card-body">
+		<div class="three-col">
+		  <div>
+		    <div class="kpi-lbl" style="margin-bottom:8px;">📊 Resumen de ejecución</div>
+		    <div id="c-mayor" style="font-size:12px;color:var(--text);line-height:1.8;">—</div>
+		  </div>
+		  <div>
+		    <div class="kpi-lbl" style="margin-bottom:8px;">💰 Resumen de saldos</div>
+		    <div id="c-saldo-mayor" style="font-size:12px;color:var(--text);line-height:1.8;">—</div>
+		  </div>
+		  <div>
+		    <div class="kpi-lbl" style="margin-bottom:8px;">🏁 Estado presupuestal</div>
+		    <div id="c-estado-ana" style="font-size:12px;color:var(--green);line-height:1.8;">—</div>
+		  </div>
+		</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

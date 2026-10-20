@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="panel-libro" id="panel-libro" class="panel">
+  <div class="sec-hdr">
+    <div>
+      <div class="sec-title">Libro Diario — Partida Doble</div>
+      <div class="sec-sub" id="libro-periodo-label">TODOS LOS PERIODOS · VERIFICACIÓN DE CUADRE AUTOMÁTICO</div>
+    </div>
+    <div class="btns-row">
+      <button class="btn-outline btn-sm" onclick="exportPDF()">📄 PDF</button>
+      <button class="btn-outline btn-sm" onclick="exportExcel()">📊 Excel</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));margin-bottom:18px;">
+    <div class="kpi-card"><div class="kpi-lbl">Asientos Registrados</div><div class="kpi-val" id="lb-total">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Total Debe</div><div class="kpi-val" id="lb-debe" style="color:var(--green)">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Total Haber</div><div class="kpi-val" id="lb-haber" style="color:var(--red-light)">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Diferencia</div><div class="kpi-val" id="lb-diff">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Estado de Cuadre</div><div class="kpi-val" id="lb-cuadre" style="font-size:16px;">—</div><div class="kpi-d up">—</div></div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">📒 Registro de Asientos</div></div>
+    <div class="card-body-0" style="overflow-x:auto;">
+      <table class="tbl" style="width:100%;">
+		<thead><tr>
+		  <th style="width:12%;text-align:left;">N° Correl.</th>
+		  <th style="width:12%;text-align:left;">Fecha</th>
+		  <th style="width:28%;text-align:left;">Descripción</th>
+		  <th style="width:14%;text-align:right;font-family:'IBM Plex Mono',monospace;">Debe (S/)</th>
+		  <th style="width:14%;text-align:right;font-family:'IBM Plex Mono',monospace;">Haber (S/)</th>
+		  <th style="width:8%;text-align:center;">👁</th>
+		</tr></thead>
+        <tbody id="libro-entries"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Estado cuadre final -->
+  <div id="libro-cuadre-alerta" style="margin-top:12px;"></div>
+</div>
+</body>
+</html>

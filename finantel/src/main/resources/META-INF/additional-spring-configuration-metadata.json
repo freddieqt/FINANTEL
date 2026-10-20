@@ -1,0 +1,19 @@
+{
+  "properties": [
+    {
+      "name": "app.jwt.keystore",
+      "type": "org.springframework.core.io.Resource",
+      "description": "Keystore resource used to sign JWTs."
+    },
+    {
+      "name": "app.jwt.keystore-password",
+      "type": "java.lang.String",
+      "description": "Password for the JWT keystore."
+    },
+    {
+      "name": "app.jwt.key-alias",
+      "type": "java.lang.String",
+      "description": "Key alias used to sign JWTs."
+    }
+  ]
+}

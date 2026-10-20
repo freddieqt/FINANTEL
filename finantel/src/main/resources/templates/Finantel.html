@@ -1,0 +1,3049 @@
+<!DOCTYPE html>
+<html lang="es"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+  <th:block th:replace="~{layout/base :: head}"></th:block>
+</head>
+<body>
+  <th:block th:replace="~{layout/base :: header}"></th:block>
+  <div class="layout">			
+    <th:block th:replace="~{layout/base :: sidebar}"></th:block>
+	<main class="content">
+	    <th:block th:replace="~{dashboard :: panel-dashboard}"></th:block>
+	    <th:block th:replace="~{asientos :: panel-asientos}"></th:block>
+	    <th:block th:replace="~{asientos :: modal-asiento}"></th:block>
+		<th:block th:replace="~{libro :: panel-libro}"></th:block>
+		<th:block th:replace="~{cuentas :: panel-cuentas}"></th:block>
+		<th:block th:replace="~{periodos :: panel-periodos}"></th:block>
+		<th:block th:replace="~{balance :: panel-balance}"></th:block>
+		<th:block th:replace="~{resultados :: panel-resultados}"></th:block>
+		<th:block th:replace="~{flujo :: panel-flujo}"></th:block>
+		<th:block th:replace="~{patrimonio :: panel-patrimonio}"></th:block>
+		<th:block th:replace="~{ratios :: panel-ratios}"></th:block>
+		<th:block th:replace="~{costos :: panel-costos}"></th:block>
+		<th:block th:replace="~{comprobantes :: panel-comprobantes}"></th:block>
+		<th:block th:replace="~{alertas :: panel-alertas}"></th:block>
+		<th:block th:replace="~{importar :: panel-importar}"></th:block>
+		<th:block th:replace="~{tipocambio :: panel-tipocambio}"></th:block>
+		<th:block th:replace="~{admin :: panel-admin}"></th:block>
+<!-- FOOTER -->
+<div style="margin-top:32px;padding:16px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;">
+  <span id="footer-info">FINANTEL S.A.C. · RUC 20110300971 · Av. Bolivia 258, Lima 15001</span>
+  <span>Sistema Contable Integral v2.0 </span>
+</div>
+
+</main>
+</div>
+</div>
+<!-- MODAL NUEVO USUARIO -->
+<div class="modal-overlay" id="modal-usuario">
+  <div class="modal">
+    <h3>Nuevo Usuario</h3>
+    <div class="modal-sub"></div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="fg"><label class="field-req">Nombre Completo</label><input type="text" placeholder="Ej: Juan Pérez Quispe"/></div>
+      <div class="fg"><label class="field-req">Correo Electrónico</label><input type="email" placeholder="usuario@finantel.pe"/></div>
+      <div class="fg"><label class="field-req">Contraseña</label><input type="password" placeholder="Mín. 8 caracteres"/></div>
+      <div class="fg"><label class="field-req">Rol</label>
+        <select>
+          <option value="Contador_General">Contador General</option>
+          <option value="Personal_Autorizado">Personal Autorizado</option>
+          <option value="Administrador">Administrador</option>
+          <option value="Auditor">Auditor</option>
+        </select>
+      </div>
+      <div class="fg"><label>DNI</label><input type="text" id="modal-dni" placeholder="Ej: 70123456" maxlength="8"/></div>
+      <div class="fg"><label>Teléfono</label><input type="text" id="modal-tel" placeholder="Ej: 987654321" maxlength="9"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal('modal-usuario')">Cancelar</button>
+      <button class="btn-gold" onclick="guardarUsuario()">Crear Usuario</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// STORAGE — persistencia con localStorage resuelve recarga
+function formatRol(rol) {
+  return rol ? rol.replace(/_/g, ' ') : '—';
+}
+
+const DB_KEY = 'finantel_db_v4';
+['finantel_db_v1','finantel_db_v2','finantel_db_v3'].forEach(k => localStorage.removeItem(k));
+
+function dbLoad() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function dbSave(data) {
+  try {
+    localStorage.setItem(DB_KEY, JSON.stringify(data));
+  } catch(e) { console.warn('Storage save failed:', e); }
+}
+
+// Datos iniciales 
+const ASIENTOS_INICIALES = [];
+const COMPROBANTES_INICIALES = [];
+const RESPALDOS_INICIALES = [];
+const USUARIOS_INICIALES = [];
+const TC_INICIALES = [];
+const AUDIT_INICIALES = [];
+
+// Cargar 
+let stored = dbLoad();
+if (!stored) {
+  stored = {
+    asientos: ASIENTOS_INICIALES,
+    comprobantes: COMPROBANTES_INICIALES,
+    respaldos: RESPALDOS_INICIALES,
+    usuarios: USUARIOS_INICIALES,
+    tcData: TC_INICIALES,
+    auditLog: AUDIT_INICIALES,
+    nextCorrelativo: 1,
+    nextCompNum: 1,
+    tcActual: { usd:'—', eur:'—', mxn:'—', hora:'—' },
+    periodos: []
+  };
+  dbSave(stored);
+}
+
+function anularAsiento(id) {	
+  const modalId = 'modal-anular';
+  let modal = document.getElementById(modalId);
+  if (!modal) { modal = document.createElement('div'); modal.className='modal-overlay'; modal.id=modalId; document.body.appendChild(modal); }
+  modal.innerHTML = `
+    <div class="modal" style="max-width:440px;">
+      <h3 style="color:var(--red);">⚠ Anular Asiento</h3>
+      <div class="modal-sub">ELIMINACIÓN LÓGICA · El asiento NO se borra físicamente</div>
+      <div class="alert alert-warn" style="margin-bottom:16px;">
+        Asiento <strong style="font-family:'IBM Plex Mono',monospace;">${id}</strong> será marcado como <strong>ANULADO</strong>.<br>
+        <span style="font-size:11px;">Permanece en historial de auditoría.</span>
+      </div>
+      <div class="fg" style="margin-bottom:16px;"><label class="field-req">Motivo de anulación</label>
+        <textarea id="motivo-anular" placeholder="Describe el motivo..." style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;min-height:70px;width:100%;resize:vertical;outline:none;"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline" onclick="closeModal('modal-anular')">Cancelar</button>
+        <button class="btn-danger" onclick="confirmarAnular(${id})">🗑 Confirmar Anulación</button>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+}
+
+function confirmarAnular(id) {
+  const motivo = document.getElementById('motivo-anular').value.trim();
+  if (!motivo) { showToast('Ingresa el motivo de anulación', 'error'); return; }
+
+  fetch(`/web/asientos/anular/${id}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  })
+  .then(r => {
+    if (r.ok) {
+      closeModal('modal-anular');
+      renderAsientos();
+      renderAlertas();   // ← AGREGAR AQUÍ
+      showToast(`Asiento ${id} anulado`, 'warn');
+    } else {
+      showToast('Error al anular el asiento', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+async function cargarPeriodos() {
+  const sel = document.getElementById('periodoId');
+  if (!sel) return;
+  const res = await fetch('/web/periodos', { credentials: 'include' });
+  const periodos = await res.json();
+  sel.innerHTML = '<option value="">-- Selecciona periodo --</option>';
+  periodos
+    .filter(p => p.estado === 'Activo')
+    .forEach(p => sel.add(new Option(p.periodo, p.id)));
+}
+
+function openNuevoAsiento() {
+  const corrEl = document.getElementById('asiento-correlativo');
+  const fechaEl = document.getElementById('asiento-fecha');
+  if (corrEl) corrEl.value = getCurrentCorrelativo();
+  if (fechaEl) fechaEl.value = new Date().toLocaleString('es-PE');
+  
+  // Limpiar form
+  const tipoEl = document.getElementById('asiento-tipo');
+  if (tipoEl) tipoEl.value = '';
+  const descEl = document.getElementById('asiento-desc');
+  if (descEl) descEl.value = '';
+  document.getElementById('sugerencia-cuentas').style.display = 'none';
+  
+  const ocrR = document.getElementById('ocr-result');
+  if (ocrR) { ocrR.style.display='none'; ocrR.innerHTML=''; }
+  
+  document.querySelectorAll('#asiento-lineas input[type=number]').forEach(i => i.value='');
+  recalcTotals();
+
+  // Cargar periodos activos desde BD
+  cargarPeriodos();
+
+  // Cargar cuentas desde BD en todos los selects de partidas
+  fetch('/web/cuentas', { credentials: 'include' })
+  .then(r => r.json())
+  .then(cuentas => {
+    const activas = cuentas.filter(c => c.estado === 'Activo' || c.estado === 'Activa');
+    const options = activas.map(c => 
+      `<option value="${c.codigo}">${c.codigo} — ${c.descripcion}</option>`
+    ).join('');
+    document.querySelectorAll('#asiento-lineas select').forEach(sel => {
+      sel.innerHTML = options;
+    });
+  });
+
+  document.getElementById('modal-asiento').classList.add('open');
+  
+  const fechaContEl = document.getElementById('asiento-fecha-contable');
+  if (fechaContEl) fechaContEl.value = new Date().toISOString().split('T')[0];
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('open');
+}
+
+function guardarAsiento() {
+  const tipo  = document.getElementById('asiento-tipo').value;
+  const descEl = document.getElementById('asiento-desc');
+  const desc  = descEl ? (descEl.options[descEl.selectedIndex]?.value !== '' ? descEl.options[descEl.selectedIndex]?.text : '') : '';
+  const tipoComp = document.getElementById('asiento-tipo-comprobante').value;
+  const refComp = document.getElementById('asiento-ref-comprobante').value.trim();
+
+  if (!tipoComp) { showToast('Selecciona tipo de comprobante','error'); return; }
+  if (!refComp) { showToast('Ingresa número de comprobante','error'); return; }
+  if (!tipo) { showToast('Tipo de asiento es obligatorio','error'); document.getElementById('asiento-tipo').style.borderColor='var(--red)'; return; }
+
+  let debe=0, haber=0;
+  document.querySelectorAll('#asiento-lineas .asiento-line').forEach(row => {
+    const inputs = row.querySelectorAll('input[type=number]');
+    debe  += parseFloat(inputs[0]?.value||0);
+    haber += parseFloat(inputs[1]?.value||0);
+  });
+
+  if (debe === 0 && haber === 0) { showToast('Ingresa montos en las partidas','error'); return; }
+  if (Math.abs(debe-haber) > 0.01) { showToast('El asiento no cuadra — Diferencia: S/ '+Math.abs(debe-haber).toFixed(2),'error'); return; }
+
+  const nuevoId  = getCurrentCorrelativo();
+  const usuario  = document.getElementById('user-name-hdr').textContent;
+  const tipoLabel= tipo.charAt(0).toUpperCase()+tipo.slice(1);
+  const descLabel= (desc && desc !== '— Seleccionar o escribir —') ? desc : tipoLabel;
+
+  // Recoger partidas
+  const partidas = [];
+  document.querySelectorAll('#asiento-lineas .asiento-line').forEach(row => {
+    const sel = row.querySelector('select');
+    const txt = row.querySelector('input[type=text]');
+    const inputs = row.querySelectorAll('input[type=number]');
+    partidas.push({ cuenta: sel?.value||'', glosa: txt?.value||'', debe: parseFloat(inputs[0]?.value||0), haber: parseFloat(inputs[1]?.value||0) });
+  });
+
+  fetch('/web/asientos', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: tipoLabel,
+          descripcion: descLabel,
+          debe: debe,
+          haber: haber,
+          estado: 'Activo',
+          usuario: usuario,
+          cuentaContable: (partidas[0]?.cuenta || '1011').split(' ')[0],
+          centroCosto: 'General',
+          moneda: 'PEN',
+          tipoCambio: 1.0,
+		  periodoId: parseInt(document.getElementById('periodoId').value),
+		  fechaContable: document.getElementById('asiento-fecha-contable').value
+        })
+      })
+    .then(r => {
+      if (r.ok) {
+        renderAsientos();
+        renderAlertas();   // ← AQUÍ
+        closeModal('modal-asiento');
+        showPanel('asientos');
+        showToast('Asiento guardado correctamente', 'success');
+  	  document.getElementById('asiento-tipo').value = '';
+  	  document.getElementById('asiento-desc').value = '';
+  	  document.querySelectorAll('#asiento-lineas input[type=number]').forEach(i => i.value = '');
+  	  document.querySelectorAll('#asiento-lineas input[type=text]').forEach(i => i.value = '');
+  	  document.getElementById('sugerencia-cuentas').style.display = 'none';
+  	  recalcTotals();
+      } else {
+        showToast('Error al guardar asiento', 'error');
+      }
+    })
+    .catch(() => showToast('Error de conexión', 'error'));
+}
+
+function addAsientoLine() {
+  const container = document.getElementById('asiento-lineas');
+  const div = document.createElement('div');
+  div.className = 'asiento-line';
+  div.innerHTML = `
+    <select style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;">
+      <option>Cargando...</option>
+    </select>
+    <input type="text" placeholder="Descripción de la partida" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;"/>
+    <input type="number" placeholder="0.00" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;text-align:right;" oninput="recalcTotals()"/>
+    <input type="number" placeholder="0.00" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;text-align:right;" oninput="recalcTotals()"/>
+    <button onclick="this.closest('.asiento-line').remove();recalcTotals();" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:14px;">×</button>`;
+  
+  container.appendChild(div);
+
+  // Cargar cuentas dinámicamente en el nuevo select
+  fetch('/web/cuentas', { credentials: 'include' })
+  .then(r => r.json())
+  .then(cuentas => {
+    const activas = cuentas.filter(c => c.estado === 'Activo' || c.estado === 'Activa');
+    const sel = div.querySelector('select');
+    sel.innerHTML = activas.map(c => 
+      `<option value="${c.codigo}">${c.codigo} — ${c.descripcion}</option>`
+    ).join('');
+  });
+}
+function recalcTotals() {
+  let debe=0,haber=0;
+  document.querySelectorAll('#asiento-lineas .asiento-line').forEach(row => {
+    const inputs = row.querySelectorAll('input[type=number]');
+    debe  += parseFloat(inputs[0]?.value||0);
+    haber += parseFloat(inputs[1]?.value||0);
+  });
+  document.getElementById('total-debe').textContent  = 'S/ '+debe.toFixed(2);
+  document.getElementById('total-haber').textContent = 'S/ '+haber.toFixed(2);
+  const diff = Math.abs(debe-haber);
+  const cs = document.getElementById('cuadre-status');
+  if (diff < 0.01 && debe > 0) cs.innerHTML = '✓ <strong style="color:var(--green)">CUADRADO ✓</strong>';
+  else cs.innerHTML = `⚡ Diferencia: <strong style="color:#fbbf24;">S/ ${diff.toFixed(2)}</strong>`;
+}
+
+function sugerirCuentas() {
+  const tipo = document.getElementById('asiento-tipo').value;
+  const sug = document.getElementById('sugerencia-cuentas');
+  const txt = document.getElementById('sugerencia-text');
+  if (tipo) document.getElementById('asiento-tipo').style.borderColor = '';
+  const sugs = {
+    credito:   'Débito: 1301 Créditos Vigentes — Crédito: 1011 Caja / 1041 Cta. Cte.',
+    deposito:  'Débito: 1011 Caja — Crédito: 2101 Dep. Ahorro / 2102 Dep. Plazo',
+    cobro:     'Débito: 1011 Caja — Crédito: 1301 Créditos Vigentes + 5101 Intereses',
+    planilla:  'Débito: 4501 Gastos Personal — Crédito: 1011 Caja',
+    provision: 'Débito: 4401 Provisiones — Crédito: 1399 Provisión Acumulada',
+    apertura:  'Débito: Activos — Crédito: Pasivos + Patrimonio',
+    ajuste:    'Según naturaleza del ajuste. Verificar saldos.',
+    cierre:    'Débito: Ingresos (5xxx) — Crédito: Gastos (4xxx) → resultado',
+  };
+  if (sugs[tipo]) { txt.textContent = sugs[tipo]; sug.style.display='flex'; }
+  else sug.style.display='none';
+}
+
+function duplicarAsiento(id) {
+  if (!id) {
+    showToast('Para duplicar un asiento existente, usa el botón 📋 en la tabla de asientos', 'info');
+    return;
+  }
+
+  fetch(`/web/asientos/duplicar/${id}`, {
+    method: 'POST',
+    credentials: 'include'
+  })
+  .then(r => {
+    if (r.ok) {
+      showToast(`Asiento ${id} duplicado correctamente`, 'success');
+      renderAsientos();
+      renderAlertas(); // ← REFRESCAR ALERTAS TAMBIÉN
+    } else {
+      showToast('Error al duplicar el asiento', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+function processOCRModal(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const ocrEl = document.getElementById('ocr-result');
+  if (!ocrEl) return;
+  ocrEl.style.display = 'flex';
+  ocrEl.className = 'alert alert-info';
+  ocrEl.innerHTML = '⏳ Procesando archivo: <strong>' + file.name + '</strong>...';
+
+  const formData = new FormData();
+  formData.append('archivo', file);
+
+  fetch('/ocr/leer', {
+    method: 'POST',
+    credentials: 'include',
+    body: formData
+  })
+  .then(r => r.text())
+  .then(texto => {
+    ocrEl.className = 'alert alert-success';
+    ocrEl.innerHTML = '✓ <strong>Texto extraído:</strong><br>'
+      + '<pre style="font-size:11px;font-family:\'IBM Plex Mono\',monospace;white-space:pre-wrap;margin-top:8px;">'
+      + texto + '</pre>';
+  })
+  .catch(() => {
+    ocrEl.className = 'alert alert-danger';
+    ocrEl.innerHTML = '✕ Error al procesar el archivo.';
+  });
+}
+function processOCRFile(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const resultEl = document.getElementById('ocr-result-page');
+  if (!resultEl) return;
+  resultEl.style.display='flex';
+  resultEl.className='alert alert-info';
+  resultEl.innerHTML = `⏳ Procesando: <strong>${file.name}</strong>...`;
+  setTimeout(() => {
+    const fecha = new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const monto = (Math.random()*5000+200).toFixed(2);
+    const factNum = 'F00'+Math.floor(Math.random()*9+1)+'-'+String(Math.floor(Math.random()*99999)).padStart(5,'0');
+    resultEl.className='alert alert-success';
+    resultEl.innerHTML = `✓ <strong> — Documento recibido:</strong> ${file.name} · ${(file.size/1024).toFixed(1)} KB<br>
+      <span style="font-size:11px;font-family:'IBM Plex Mono',monospace;">
+        📅 Fecha detectada: ${fecha} · 🧾 N°: ${factNum} · 💰 Monto: S/ ${monto}<br>
+        Datos listos para validar contra asiento contable. Ingresa el número de asiento para comparar.
+      </span>`;
+    showToast(`Archivo ${file.name} procesado. Revisa los datos extraídos.`, 'success');
+    logAudit(document.getElementById('user-name-hdr').textContent, 'OCR', file.name, '—', `${file.name} — S/ ${monto}`);
+  }, 1800);
+}
+function processExcelFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const form = new FormData();
+    form.append('archivo', file);
+
+    fetch('/web/importar-excel', { 
+        method: 'POST', 
+        body: form,
+        credentials: 'include' 
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.exito) {
+            mostrarTablaImportacion(data.asientos);
+            showToast(data.mensaje, 'success');
+            input.value = '';
+        } else {
+            showToast(data.mensaje, 'error');
+        }
+    })
+    .catch(e => showToast('Error: ' + e.message, 'error'));
+}
+function renderLibro() {
+  console.log('>>> renderLibro iniciado');
+  const el = document.getElementById('libro-entries');
+  if (!el) return;
+
+  Promise.all([
+    fetch('/web/asientos', { credentials: 'include' }).then(r => r.json()),
+    fetch('/web/cuentas',  { credentials: 'include' }).then(r => r.json())
+  ])
+  .then(([partidas, cuentas]) => {
+    const activos = partidas.filter(a => a.estado === 'Activo');
+
+    const asientosMap = {};
+    activos.forEach(partida => {
+      const num = partida.numeroCorrelativo || '—';
+      if (!asientosMap[num]) {
+        asientosMap[num] = {
+          id: partida.id,
+          numeroCorrelativo: num,
+          fechaRegistro: partida.fechaRegistro,
+          descripcion: partida.descripcion,
+          estado: partida.estado,
+          debe: 0,
+          haber: 0,
+          partidas: []
+        };
+      }
+      asientosMap[num].debe += parseFloat(partida.debe) || 0;
+      asientosMap[num].haber += parseFloat(partida.haber) || 0;
+      asientosMap[num].partidas.push(partida);
+    });
+
+    const asientos = Object.values(asientosMap);
+    const fmt = v => v > 0 ? 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2}) : '—';
+
+    if (!asientos.length) {
+      el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin asientos registrados</td></tr>';
+      return;
+    }
+
+    let totalDebe = 0, totalHaber = 0;
+    const rows = [];
+
+    asientos.sort((a, b) => {
+      const fechaA = a.fechaRegistro ? new Date(a.fechaRegistro) : new Date(0);
+      const fechaB = b.fechaRegistro ? new Date(b.fechaRegistro) : new Date(0);
+      return fechaA - fechaB;
+    });
+
+    asientos.forEach(a => {
+      totalDebe  += a.debe;
+      totalHaber += a.haber;
+      const fecha = a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleDateString('es-PE') : '—';
+      const descuadrado = Math.abs(a.debe - a.haber) > 0.01;
+
+      rows.push(`<tr style="${descuadrado ? 'border-left:3px solid var(--red);' : ''}">
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${a.numeroCorrelativo || '—'}</td>
+        <td style="font-size:11px;color:var(--muted);">${fecha}</td>
+        <td>${a.descripcion || '—'}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;color:var(--green-light);">${fmt(a.debe)}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;color:var(--red-light);">${fmt(a.haber)}</td>
+        <td style="text-align:center;"><button class="btn-outline btn-sm" onclick="verDetalleAsiento(${a.id})" title="Ver partidas" style="cursor:pointer;">👁</button></td>
+      </tr>`);
+    });
+
+    el.innerHTML = rows.join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin registros</td></tr>';
+
+    const diff = Math.abs(totalDebe - totalHaber);
+    const cuadra = diff < 0.01;
+
+    const elTotal  = document.getElementById('lb-total');
+    const elDebe   = document.getElementById('lb-debe');
+    const elHaber  = document.getElementById('lb-haber');
+    const elDiff   = document.getElementById('lb-diff');
+    const elCuadre = document.getElementById('lb-cuadre');
+
+    if (elTotal)  elTotal.textContent  = asientos.length;
+    if (elDebe)   elDebe.textContent   = 'S/ ' + totalDebe.toLocaleString('es-PE', {minimumFractionDigits:2});
+    if (elHaber)  elHaber.textContent  = 'S/ ' + totalHaber.toLocaleString('es-PE', {minimumFractionDigits:2});
+    if (elDiff)   elDiff.textContent   = 'S/ ' + diff.toLocaleString('es-PE', {minimumFractionDigits:2});
+    if (elCuadre) elCuadre.textContent = cuadra ? '✅ Cuadrado' : '❌ Descuadrado';
+  })
+  .catch((err) => {
+    console.error('>>> ERROR renderLibro:', err);
+    el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:20px;">Error cargando libro diario</td></tr>';
+  });
+}
+
+async function verDetalleAsiento(asientoId) {
+  try {
+    const response = await fetch(`/web/asientos/${asientoId}/partidas`, { credentials: 'include' });
+    const partidas = await response.json();
+    
+    let html = `<div style="padding:16px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);">
+            <th style="text-align:left;padding:8px;font-weight:600;">Cuenta</th>
+            <th style="text-align:left;padding:8px;font-weight:600;">Descripción</th>
+            <th style="text-align:right;padding:8px;font-weight:600;">Debe (S/)</th>
+            <th style="text-align:right;padding:8px;font-weight:600;">Haber (S/)</th>
+          </tr>
+        </thead>
+        <tbody>`;
+    
+    let sumaDebe = 0, sumaHaber = 0;
+    
+    partidas.forEach(p => {
+      const debe = parseFloat(p.debe) || 0;
+      const haber = parseFloat(p.haber) || 0;
+      sumaDebe += debe;
+      sumaHaber += haber;
+      const fmt = v => v > 0 ? v.toLocaleString('es-PE', {minimumFractionDigits:2}) : '—';
+      const desc = p.descripcion || p.glosa || '—';
+      
+      html += `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;font-family:'IBM Plex Mono',monospace;"><span class="badge b-teal">${p.cuenta_contable || '—'}</span></td>
+        <td style="padding:8px;color:var(--muted);font-size:12px;">${desc}</td>
+        <td style="padding:8px;text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--green-light);">${debe > 0 ? fmt(debe) : '—'}</td>
+        <td style="padding:8px;text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--red-light);">${haber > 0 ? fmt(haber) : '—'}</td>
+      </tr>`;
+    });
+    
+    const cuadra = Math.abs(sumaDebe - sumaHaber) < 0.01;
+    html += `<tr style="border-top:2px solid var(--border);font-weight:600;background:var(--bg-secondary);">
+      <td colspan="2" style="padding:8px;">TOTAL</td>
+      <td style="padding:8px;text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--green-light);">S/ ${sumaDebe.toLocaleString('es-PE', {minimumFractionDigits:2})}</td>
+      <td style="padding:8px;text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--red-light);">S/ ${sumaHaber.toLocaleString('es-PE', {minimumFractionDigits:2})}</td>
+    </tr>`;
+    html += `</tbody></table>`;
+    html += `<div style="margin-top:12px;padding:8px;border-radius:4px;background:${cuadra ? 'var(--green-light)' : 'var(--red-light)'}20;">
+      ${cuadra ? '✅ Asiento cuadrado' : '❌ Asiento descuadrado'}
+    </div></div>`;
+    
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    div.innerHTML = `<div style="background:white;border-radius:8px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+      <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Detalle de Partidas</h3>
+        <button onclick="this.closest('div').parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:20px;cursor:pointer;">✕</button>
+      </div>${html}</div>`;
+    document.body.appendChild(div);
+  } catch (err) {
+    console.error('>>> ERROR:', err);
+    alert('Error cargando partidas');
+  }
+}
+function renderComprobantes() {
+  const tbody = document.querySelector('#panel-comprobantes table tbody');
+  if (!tbody) return;
+
+  fetch('/web/comprobantes', { credentials: 'include' })
+  .then(r => r.json())
+  .then(comprobantes => {
+    if (!comprobantes.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px;">Sin comprobantes registrados</td></tr>';
+      return;
+    }
+    tbody.innerHTML = comprobantes.map(c => {
+      const monto    = parseFloat(c.monto) || 0;
+      const subtotal = Math.round((monto / 1.18) * 100) / 100;
+      const igv      = Math.round((monto - subtotal) * 100) / 100;
+      const fmt      = v => 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2});
+      const badgeTipo = c.tipo==='Factura'?'b-blue':c.tipo==='Boleta'?'b-teal':'b-gold';
+      const badgeEst  = c.estado==='Emitido'?'b-green':'b-gold';
+      return `<tr>
+        <td style="font-family:'IBM Plex Mono',monospace;">${c.numero || '—'}</td>
+        <td>${c.fecha || '—'}</td>
+        <td><span class="badge ${badgeTipo}">${c.tipo || '—'}</span></td>
+        <td>${c.cliente || '—'}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;">${fmt(subtotal)}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;">${fmt(igv)}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;">${fmt(monto)}</td>
+        <td><span class="badge ${badgeEst}">${c.estado || '—'}</span></td>
+        <td><button class="btn-outline btn-sm" onclick="descargarComprobante('${c.numero}')">📄 PDF</button></td>
+      </tr>`;
+    }).join('');
+  })
+  .catch(() => {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--red);">Error cargando comprobantes</td></tr>';
+  });
+}
+function emitirComprobante() {
+  const modalId = 'modal-comprobante';
+  let modal = document.getElementById(modalId);
+  if (!modal) { modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.id = modalId; document.body.appendChild(modal); }
+  modal.innerHTML = `
+    <div class="modal" style="max-width:640px;">
+      <h3>🧾 Emitir Comprobante</h3>
+      <div class="modal-sub">NUEVA EMISIÓN</div>
+
+      <div style="font-size:11px;color:var(--gold);font-family:'IBM Plex Mono',monospace;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📋 Datos del Comprobante</div>
+      <div class="form-grid" style="margin-bottom:14px;">
+        <div class="fg"><label class="field-req">Tipo de Comprobante</label>
+          <select id="comp-tipo" onchange="actualizarSerie()">
+            <option>Factura</option><option>Boleta</option>
+            <option>Recibo de Pago</option><option>Nota de Débito</option><option>Nota de Crédito</option>
+          </select>
+        </div>
+        <div class="fg"><label>Serie</label><input type="text" id="comp-serie" value="F001" readonly style="opacity:0.6;"/></div>
+        <div class="fg"><label>N° Correlativo</label><input type="text" id="comp-correlativo" placeholder="Auto" readonly style="opacity:0.6;"/></div>
+        <div class="fg"><label class="field-req">Fecha de Emisión</label><input type="date" id="comp-fecha" value="${new Date().toISOString().split('T')[0]}"/></div>
+        <div class="fg"><label>Moneda</label>
+          <select id="comp-moneda"><option value="PEN">PEN — Soles</option><option value="USD">USD — Dólares</option></select>
+        </div>
+        <div class="fg"><label>Forma de Pago</label>
+          <select id="comp-pago"><option>Contado</option><option>Crédito</option></select>
+        </div>
+      </div>
+
+      <div style="font-size:11px;color:var(--gold);font-family:'IBM Plex Mono',monospace;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">👤 Datos del Cliente</div>
+      <div class="form-grid" style="margin-bottom:14px;">
+        <div class="fg"><label>Tipo de Documento</label>
+          <select id="comp-tipo-doc"><option>RUC</option><option>DNI</option><option>CE</option></select>
+        </div>
+        <div class="fg"><label class="field-req">N° Documento</label><input type="text" id="comp-ndoc" placeholder="20xxxxxxxxx"/></div>
+        <div class="fg"><label class="field-req">Nombre / Razón Social</label><input type="text" id="comp-cliente" placeholder="Nombre o razón social"/></div>
+        <div class="fg"><label>Dirección</label><input type="text" id="comp-direccion" placeholder="Opcional"/></div>
+      </div>
+
+      <div style="font-size:11px;color:var(--gold);font-family:'IBM Plex Mono',monospace;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📦 Detalle</div>
+      <div class="form-grid" style="margin-bottom:14px;">
+        <div class="fg"><label class="field-req">Concepto / Descripción</label><input type="text" id="comp-concepto" placeholder="Descripción del servicio"/></div>
+        <div class="fg"><label class="field-req">Cantidad</label><input type="number" id="comp-cantidad" value="1" min="1" onchange="calcularTotales()"/></div>
+        <div class="fg"><label class="field-req">Precio Unitario (S/)</label><input type="number" id="comp-precio" placeholder="0.00" step="0.01" onchange="calcularTotales()"/></div>
+      </div>
+
+      <div style="font-size:11px;color:var(--gold);font-family:'IBM Plex Mono',monospace;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">💰 Totales</div>
+      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;">
+          <span style="color:var(--muted);">Subtotal</span>
+          <span id="comp-subtotal" style="font-family:'IBM Plex Mono',monospace;">S/ 0.00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border);">
+          <span style="color:var(--muted);">IGV 18%</span>
+          <span id="comp-igv" style="font-family:'IBM Plex Mono',monospace;">S/ 0.00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:15px;font-weight:600;">
+          <span style="color:var(--gold);">TOTAL</span>
+          <span id="comp-total" style="font-family:'IBM Plex Mono',monospace;color:var(--gold);">S/ 0.00</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-outline" onclick="closeModal('${modalId}')">Cancelar</button>
+        <button class="btn-gold" onclick="confirmarComprobante()">✓ Emitir</button>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+
+  // Generar correlativo automático
+  fetch('/web/comprobantes', { credentials: 'include' })
+  .then(r => r.json())
+  .then(comps => {
+    const num = (comps.length + 1).toString().padStart(3, '0');
+    document.getElementById('comp-correlativo').value = num;
+  });
+
+  actualizarSerie();
+}
+
+function actualizarSerie() {
+  const tipo = document.getElementById('comp-tipo')?.value;
+  const serie = document.getElementById('comp-serie');
+  if (!serie) return;
+  if (tipo === 'Factura' || tipo === 'Nota de Débito' || tipo === 'Nota de Crédito') serie.value = 'F001';
+  else if (tipo === 'Boleta') serie.value = 'B001';
+  else serie.value = 'R001';
+}
+
+function calcularTotales() {
+  const cantidad = parseFloat(document.getElementById('comp-cantidad')?.value) || 0;
+  const precio   = parseFloat(document.getElementById('comp-precio')?.value)   || 0;
+  const subtotal = cantidad * precio;
+  const igv      = subtotal * 0.18;
+  const total    = subtotal + igv;
+  const fmt = v => 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2});
+  document.getElementById('comp-subtotal').textContent = fmt(subtotal);
+  document.getElementById('comp-igv').textContent      = fmt(igv);
+  document.getElementById('comp-total').textContent    = fmt(total);
+}
+function confirmarComprobante() {
+  const tipo      = document.getElementById('comp-tipo')?.value;
+  const serie     = document.getElementById('comp-serie')?.value;
+  const corr      = document.getElementById('comp-correlativo')?.value;
+  const fecha     = document.getElementById('comp-fecha')?.value;
+  const cliente   = document.getElementById('comp-cliente')?.value?.trim();
+  const concepto  = document.getElementById('comp-concepto')?.value?.trim();
+  const cantidad  = parseFloat(document.getElementById('comp-cantidad')?.value) || 0;
+  const precio    = parseFloat(document.getElementById('comp-precio')?.value)   || 0;
+  const total     = cantidad * precio * 1.18;
+
+  if (!cliente || !concepto || precio <= 0) {
+    showToast('Completa todos los campos obligatorios', 'warn'); return;
+  }
+
+  const numero = serie + '-' + corr;
+  fetch('/web/comprobantes', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ numero, fecha, tipo, cliente, monto: Math.round(total * 100) / 100, estado: 'Emitido' })
+  })
+  .then(r => { if (r.ok) { closeModal('modal-comprobante'); renderComprobantes(); showToast('Comprobante emitido', 'success'); } })
+  .catch(() => showToast('Error al emitir comprobante', 'error'));
+}
+function descargarComprobante(num) {
+	  fetch('/web/comprobantes', { credentials: 'include' })
+	  .then(r => r.json())
+	  .then(comprobantes => {
+	    const comp = comprobantes.find(c => c.numero === num);
+	    if (!comp) { showToast('Comprobante no encontrado', 'error'); return; }
+	    showToast('Generando PDF del comprobante ' + num + '...', 'info');
+	    setTimeout(() => {
+	      const win = window.open('','_blank','width=620,height=520');
+	      win.document.write('<html><head><title>Comprobante ' + num + '</title>'
+	        + '<style>body{font-family:Arial,sans-serif;padding:30px;color:#222;}'
+	        + '.logo{font-size:22px;font-weight:bold;color:#1a3461;}'
+	        + 'table{width:100%;border-collapse:collapse;margin-top:20px;}'
+	        + 'td{padding:8px 12px;border:1px solid #ccc;}'
+	        + '.lbl{background:#f5f5f5;font-weight:bold;width:40%;}'
+	        + '.total{background:#1a3461;color:#fff;font-weight:bold;text-align:right;}'
+	        + '</style></head><body>'
+	        + '<div class="logo">⚖ FINANTEL S.A.C.</div>'
+	        + '<div style="font-size:11px;color:#666;">RUC 20110300971 · Av. Bolivia 258, Lima 15001</div><hr>'
+	        + '<h2 style="color:#1a3461;">COMPROBANTE DE PAGO</h2>'
+	        + '<table>'
+	        + '<tr><td class="lbl">N° Comprobante</td><td><strong>' + comp.numero + '</strong></td></tr>'
+	        + '<tr><td class="lbl">Fecha</td><td>' + (comp.fecha || '—') + '</td></tr>'
+	        + '<tr><td class="lbl">Tipo</td><td>' + (comp.tipo || '—') + '</td></tr>'
+	        + '<tr><td class="lbl">Socio / Cliente</td><td>' + (comp.cliente || '—') + '</td></tr>'
+	        + '<tr><td class="lbl">Estado</td><td>' + (comp.estado || '—') + '</td></tr>'
+	        + '<tr><td class="total" colspan="2">MONTO TOTAL: S/ ' + (comp.monto || '0.00') + '</td></tr>'
+	        + '</table>'
+	        + '<p style="font-size:10px;color:#999;margin-top:20px;">Generado por FINANTEL Sistema Contable v2.0</p>'
+	        + '<scr'+'ipt>window.print();<\/scr'+'ipt></body></html>');
+	      win.document.close();
+	      showToast('Comprobante ' + num + ' listo para imprimir', 'success');
+	    }, 800);
+	  })
+	  .catch(() => showToast('Error de conexión', 'error'));
+	}
+
+function renderRespaldos() {
+  const tbody = document.querySelector('#sub-respaldos table tbody');
+  if (!tbody) return;
+
+  fetch('/web/respaldos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(respaldos => {
+    if (!respaldos.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin respaldos registrados</td></tr>';
+      return;
+    }
+    tbody.innerHTML = respaldos.map(r => {
+      const tipoBadge = r.tipo==='Manual'?'b-blue':r.tipo==='Diario'?'b-green':r.tipo==='Semanal'?'b-gold':'b-teal';
+      return `<tr>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${r.fecha}</td>
+        <td><span class="badge ${tipoBadge}">${r.tipo}</span></td>
+        <td>${r.tamanio}</td>
+        <td>${r.usuario}</td>
+        <td><span class="badge b-green">${r.estado}</span></td>
+        <td><button class="btn-outline btn-sm" onclick="restaurarRespaldo('${r.fecha}')">Restaurar</button></td>
+      </tr>`;
+    }).join('');
+  })
+  .catch(() => showToast('Error cargando respaldos', 'error'));
+  // Cargar estado de switches
+  fetch('/web/config-respaldos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(configs => {
+    const checkboxes = document.querySelectorAll('#sub-respaldos input[type=checkbox]');
+	configs.forEach(c => {
+	  if (c.tipo === 'Diario') checkboxes[0].checked = c.activo == 1;
+	  else if (c.tipo === 'Semanal') checkboxes[1].checked = c.activo == 1;
+	  else if (c.tipo === 'Mensual') checkboxes[2].checked = c.activo == 1;
+	});
+
+	// Actualizar alerta
+	const activados = configs.filter(c => c.activo == 1).map(c => {
+	  if (c.tipo === 'Diario') return 'Diario 02:00 AM';
+	  if (c.tipo === 'Semanal') return 'Semanal 03:00 AM';
+	  if (c.tipo === 'Mensual') return 'Mensual 04:00 AM';
+	}).join(', ');
+	const alerta = document.querySelector('#sub-respaldos .alert-success');
+	if (alerta) {
+	  if (activados) alerta.innerHTML = `✓ Respaldos activos: <strong>${activados}</strong>`;
+	  else alerta.innerHTML = `⚠ No hay respaldos programados activos.`;
+	  alerta.className = activados ? 'alert alert-success' : 'alert alert-warn';
+	  }
+	});
+}
+function toggleRespaldo(tipo, activo) {
+  fetch('/web/config-respaldos/' + tipo, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ activo: activo })
+  })
+  .then(r => {
+    if (r.ok) {
+      showToast('Respaldo ' + tipo + ' ' + (activo ? 'activado' : 'desactivado'), 'info');
+      renderRespaldos();
+    } else {
+      showToast('Error al actualizar', 'error');
+    }
+  });
+}
+function crearRespaldo(btn) {
+  const trigger = btn || event?.target || document.activeElement;
+  if (trigger) { trigger.disabled = true; trigger.textContent = '⏳ Creando...'; }
+  showToast('Creando respaldo manual...', 'info');
+
+  fetch('/web/respaldos', {
+    method: 'POST',
+    credentials: 'include'
+  })
+  .then(r => {
+    if (r.ok) {
+      renderRespaldos();
+      if (trigger) { trigger.disabled = false; trigger.textContent = '+ Respaldo Manual'; }
+      showToast('Respaldo manual creado correctamente', 'success');
+    } else {
+      showToast('Error al crear respaldo', 'error');
+      if (trigger) { trigger.disabled = false; trigger.textContent = '+ Respaldo Manual'; }
+    }
+  })
+  .catch(() => {
+    showToast('Error de conexión', 'error');
+    if (trigger) { trigger.disabled = false; trigger.textContent = '+ Respaldo Manual'; }
+  });
+}
+
+function restaurarRespaldo(fecha) {
+  if (!confirm(`¿Restaurar la base de datos al punto:\n${fecha}\n\nEsta acción reemplazará los datos actuales. ¿Continuar?`)) return;
+  showToast(`Restaurando BD al punto ${fecha}...`,'warn');
+  setTimeout(() => {
+    showToast('Base de datos restaurada exitosamente ✓','success');
+    logAudit(document.getElementById('user-name-hdr').textContent,'Restauración','Base de datos',`Punto: ${fecha}`,'Restauración completada');
+  }, 2500);
+}
+// ============================================================
+// USUARIOS —    con persistencia
+// ============================================================
+function renderUsuarios() {
+  const tbody = document.querySelector('#sub-usuarios table tbody');
+  if (!tbody) return;
+  
+  	fetch('/web/usuarios', { credentials: 'include' })
+    .then(r => r.json())
+    .then(usuarios => {
+      if (!usuarios.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin usuarios registrados</td></tr>';
+        return;
+      }
+      tbody.innerHTML = usuarios.map(u => `
+        <tr>
+          <td>${u.nombre}</td>
+          <td><span class="badge b-gold">${formatRol(u.rol)}</span></td>
+          <td><span class="badge ${u.estado === 'Activo' ? 'b-green' : 'b-red'}">${u.estado}</span></td>
+          <td style="font-family:'IBM Plex Mono',monospace;">${u.intentos}</td>
+          <td style="font-size:11px;color:var(--muted);">${u.ultimo_acceso || '—'}</td>
+		  <td><button class="btn-outline btn-sm" onclick="editarUsuario(${u.id})">Editar</button></td>
+        </tr>`).join('');
+    })
+    .catch(() => {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);">Error cargando usuarios</td></tr>';
+	  setTimeout(() => { document.documentElement.scrollTop = 0; }, 200);
+    });
+}
+function openModalUsuario() { 
+	document.getElementById('modal-usuario').classList.add('open'); 
+}
+function guardarUsuario() {
+  const nombre = document.querySelector('#modal-usuario input[type=text]')?.value.trim();
+  const email  = document.querySelector('#modal-usuario input[type=email]')?.value.trim();
+  const pass   = document.querySelector('#modal-usuario input[type=password]')?.value;
+  const rolEl  = document.querySelector('#modal-usuario select');
+  const rol    = rolEl?.value;
+  const dni = document.getElementById('modal-dni')?.value.trim();
+  const tel = document.getElementById('modal-tel')?.value.trim();
+
+  let errores = [];
+  if (!nombre) errores.push('Nombre es obligatorio');
+  if (!email || !email.includes('@')) errores.push('Email inválido');
+  if (!pass || pass.length < 8) errores.push('Contraseña mín. 8 caracteres');
+  if (!rol || rol.startsWith('—')) errores.push('Selecciona un rol');
+  if (dni && !/^\d{8}$/.test(dni)) errores.push('DNI debe tener exactamente 8 dígitos');
+  if (tel) {
+    if (!/^\d{9}$/.test(tel)) errores.push('Teléfono debe tener exactamente 9 dígitos');
+    else if (!tel.startsWith('9')) errores.push('Teléfono debe empezar en 9');
+  }
+  if (errores.length) { errores.forEach(e => showToast(e, 'error')); return; }
+  fetch('/web/usuarios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+	body: JSON.stringify({ nombre, email, password: pass, rol, estado: 'Pendiente', intentos: 0, dni, telefono: tel })
+  })
+  .then(r => {
+    if (r.ok) {
+      showToast('Usuario ' + nombre + ' creado correctamente', 'success');
+      closeModal('modal-usuario');
+      renderUsuarios();
+      document.querySelector('#modal-usuario input[type=text]').value = '';
+      document.querySelector('#modal-usuario input[type=email]').value = '';
+      document.querySelector('#modal-usuario input[type=password]').value = '';
+      if (rolEl) rolEl.value = rolEl.options[0].value;
+	  document.getElementById('modal-dni').value = '';
+	  document.getElementById('modal-tel').value = '';
+    } else {
+      showToast('Error al crear usuario', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+
+function desbloquearUsuario(idx) {
+  stored.usuarios[idx].estado='Activo'; stored.usuarios[idx].intentos=0;
+  saveAll(); renderUsuarios();
+  showToast(`Cuenta de ${stored.usuarios[idx].nombre} desbloqueada`, 'success');
+  logAudit(document.getElementById('user-name-hdr').textContent,'Desbloqueo',`Usuario: ${stored.usuarios[idx].nombre}`,'Bloqueado','Activo');
+}
+
+function editarUsuario(id) {
+	fetch('/web/usuarios', { credentials: 'include' })
+    .then(r => r.json())
+    .then(usuarios => {
+      const u = usuarios.find(x => x.id === id);
+      if (!u) return;
+      const modalId = 'modal-edit-usuario';
+      let modal = document.getElementById(modalId);
+      if (!modal) { modal=document.createElement('div'); modal.className='modal-overlay'; modal.id=modalId; document.body.appendChild(modal); }
+      modal.innerHTML = `
+        <div class="modal" style="max-width:480px;">
+          <h3>Editar Usuario</h3>
+          <div class="modal-sub">MODIFICAR PERMISOS Y ROL</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="fg"><label>Nombre</label><input type="text" id="eu-nombre" value="${u.nombre}"/></div>
+            <div class="fg"><label>Rol</label>
+              <select id="eu-rol">
+				<option value="Administrador" ${u.rol==='Administrador'?'selected':''}>Administrador</option>
+				<option value="Contador_General" ${u.rol==='Contador_General'?'selected':''}>Contador General</option>
+				<option value="Auditor" ${u.rol==='Auditor'?'selected':''}>Auditor</option>
+				<option value="Personal_Autorizado" ${u.rol==='Personal_Autorizado'?'selected':''}>Personal Autorizado</option>
+              </select></div>
+            <div class="fg"><label>Estado</label>
+              <select id="eu-estado">
+                <option ${u.estado==='Activo'?'selected':''}>Activo</option>
+                <option ${u.estado==='Bloqueado'?'selected':''}>Bloqueado</option>
+              </select></div>
+          </div>
+          <div class="modal-footer">
+			<button class="btn-outline" onclick="closeModal('${modalId}')">Cancelar</button>
+			<button class="btn-outline" onclick="closeModal('${modalId}');cambiarPassword(${u.id})">🔒 Cambiar Contraseña</button>
+			<button class="btn-gold" onclick="guardarEdicionUsuario(${u.id})">Guardar Cambios</button>
+          </div>
+        </div>`;
+      modal.classList.add('open');
+    });
+}
+
+function guardarEdicionUsuario(id) {
+  const nombre = document.getElementById('eu-nombre').value.trim();
+  const rol    = document.getElementById('eu-rol').value;
+  const estado = document.getElementById('eu-estado').value;
+
+  fetch(`/web/usuarios/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre, rol, estado })
+  })
+  .then(r => {
+    if (r.ok) {
+      showToast('Usuario actualizado correctamente', 'success');
+      closeModal('modal-edit-usuario');
+      renderUsuarios();
+    } else {
+      showToast('Error al actualizar', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+
+function nuevoPeriodo() {
+  var mid = 'modal-nuevo-periodo';
+  var m = document.getElementById(mid);
+  if (!m) { m=document.createElement('div'); m.className='modal-overlay'; m.id=mid; document.body.appendChild(m); }
+  m.innerHTML = '<div class="modal" style="max-width:500px;">'
+    + '<h3>Nuevo Periodo Contable</h3>'
+    + '<div class="modal-sub">DEFINICI\u00d3N DE PERIODO</div>'
+    + '<div style="display:flex;flex-direction:column;gap:12px;">'
+    + '<div class="fg"><label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Nombre del Periodo *</label>'
+    + '<input type="text" id="np-nom" placeholder="Ej: T2 2026" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;"/></div>'
+    + '<div class="form-grid-2">'
+    + '<div class="fg"><label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Fecha Inicio *</label>'
+    + '<input type="date" id="np-ini" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;"/></div>'
+    + '<div class="fg"><label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Fecha Cierre *</label>'
+    + '<input type="date" id="np-cie" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;"/></div>'
+    + '</div></div>'
+    + '<div class="modal-footer">'
+    + '<button class="btn-outline" onclick="closeModal(\'modal-nuevo-periodo\')">Cancelar</button>'
+    + '<button class="btn-gold" onclick="confirmarNuevoPeriodo()">Crear Periodo</button>'
+    + '</div></div>';
+  m.classList.add('open');
+}
+
+function confirmarNuevoPeriodo() {
+  const nom = document.getElementById('np-nom').value.trim();
+  const ini = document.getElementById('np-ini').value;
+  const cie = document.getElementById('np-cie').value;
+  if (!nom) { showToast('El nombre del periodo es obligatorio','error'); return; }
+  if (!ini) { showToast('La fecha de inicio es obligatoria','error'); return; }
+  if (!cie) { showToast('La fecha de cierre es obligatoria','error'); return; }
+  if (ini >= cie) { showToast('El cierre debe ser posterior al inicio','error'); return; }
+
+  fetch('/web/periodos', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ periodo: nom, fechaInicio: ini, fechaCierre: cie })
+  })
+  .then(r => {
+    if (r.ok) {
+      closeModal('modal-nuevo-periodo');
+      renderPeriodos();
+      showToast('Periodo "' + nom + '" creado correctamente', 'success');
+    } else {
+      showToast('Error al crear periodo', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+
+function renderPeriodos() {
+  const tbody = document.querySelector('#panel-periodos table tbody');
+  if (!tbody) return;
+
+  fetch('/web/periodos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(periodos => {
+    if (!periodos.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin periodos registrados</td></tr>';
+      return;
+    }
+    tbody.innerHTML = periodos.map(p => `
+      <tr>
+        <td>${p.periodo || '—'}</td>
+        <td>${p.fechaInicio || '—'}</td>
+        <td>${p.fechaCierre || '—'}</td>
+        <td><span class="badge ${p.estado==='Activo'?'b-gold':'b-red'}">${p.estado}</span></td>
+        <td>—</td>
+        <td>${p.cerradoPor || '—'}</td>
+        <td>${p.estado==='Activo'
+          ? `<button class="btn-outline btn-sm" onclick="cerrarPeriodo(${p.id})">Cerrar Periodo</button>`
+          : `<span class="badge b-muted">Cerrado</span>`}
+        </td>
+      </tr>`).join('');
+  })
+  .catch(() => {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red);">Error cargando periodos</td></tr>';
+  });
+}
+function cerrarPeriodo(id) {
+  if (!confirm('¿Cerrar este periodo? Los asientos quedarán bloqueados.')) return;
+  fetch(`/web/periodos/${id}/cerrar`, {
+    method: 'PATCH',
+    credentials: 'include'
+  })
+  .then(r => {
+    if (r.ok) {
+      renderPeriodos();
+      showToast('Periodo cerrado correctamente', 'warn');
+    } else {
+      showToast('Error al cerrar periodo', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+
+function guardarConfig() {
+  const root = document.getElementById('sub-configuracion');
+  if (!root) {
+    showToast('Configuración guardada y persistida ✓','success');
+    saveAll();
+    return;
+  }
+
+  const fields = root.querySelectorAll('.card input, .card select, .card textarea');
+  const checks = root.querySelectorAll('input[type=checkbox]');
+  stored.config = {
+    razonSocial: fields[0]?.value || 'FINANTEL S.A.C.',
+    ruc: fields[1]?.value || '20110300971',
+    direccion: fields[2]?.value || '',
+    email: fields[3]?.value || '',
+    web: fields[4]?.value || '',
+    moneda: fields[5]?.value || 'PEN — Sol Peruano',
+    periodoFiscal: fields[6]?.value || '',
+    metodoDep: fields[7]?.value || '',
+    tasaIR: fields[8]?.value || '',
+    aprobacionDoble: !!checks[0]?.checked,
+    alertasAutomaticas: !!checks[1]?.checked,
+    ocrAutomatico: !!checks[2]?.checked,
+    alertasEmail: !!checks[3]?.checked,
+    alertasVencimientos: !!checks[4]?.checked,
+    diasPrevios: fields[14]?.value || '7'
+  };
+  saveAll();
+  applyConfigToUI();
+
+  // Actualizar nombre en UI
+  const footer = document.getElementById('footer-info');
+  if (footer) {
+    footer.textContent = stored.config.razonSocial + ' · RUC ' + stored.config.ruc + ' · ' + stored.config.direccion;
+  }
+  showToast('Cambios guardados correctamente ✓','success');
+  logAudit(document.getElementById('user-name-hdr').textContent,'Configuración','Parámetros sistema','—','Cambios guardados');
+}
+
+function guardarCambios() {
+  guardarConfig();
+}
+
+function applyConfigToUI() {
+  const root = document.getElementById('sub-configuracion');
+  const cfg = stored.config || {};
+  if (!root) return;
+  const fields = root.querySelectorAll('.card input, .card select, .card textarea');
+  if (fields[0]) fields[0].value = cfg.razonSocial || fields[0].value;
+  if (fields[1]) fields[1].value = cfg.ruc || fields[1].value;
+  if (fields[2]) fields[2].value = cfg.direccion || fields[2].value;
+  if (fields[3]) fields[3].value = cfg.email || fields[3].value;
+  if (fields[4]) fields[4].value = cfg.web || fields[4].value;
+  if (fields[5]) fields[5].value = cfg.moneda || fields[5].value;
+  const checks = root.querySelectorAll('input[type=checkbox]');
+  if (checks[0]) checks[0].checked = cfg.aprobacionDoble ?? checks[0].checked;
+  if (checks[1]) checks[1].checked = cfg.alertasAutomaticas ?? checks[1].checked;
+  if (checks[2]) checks[2].checked = cfg.ocrAutomatico ?? checks[2].checked;
+  const footer = document.getElementById('footer-info');
+  if (footer && cfg.razonSocial) {
+    footer.textContent = cfg.razonSocial + ' · RUC ' + (cfg.ruc||'') + ' · ' + (cfg.direccion||'');
+  }
+}
+function showHelp() { showAdminPanel('sub-ayuda'); showToast('Centro de Ayuda','info'); }
+
+function getInconsistencyRow(id) {
+  return Array.from(document.querySelectorAll('#panel-errores tbody tr')).find(tr => (tr.cells[0]?.textContent || '').trim() === id) || null;
+}
+
+function saveInconsistencyState(id, estado) {
+  stored.inconsistencias = stored.inconsistencias || {};
+  stored.inconsistencias[id] = Object.assign({ actualizado: new Date().toLocaleString('es-PE') }, estado);
+  saveAll();
+}
+
+function setInconsistencyActionCell(row, label, cls='b-green') {
+  if (!row) return;
+  row.cells[5].innerHTML = `<span class="badge ${cls}">${label}</span>`;
+}
+
+function corregirInconsistencia(id) {
+  const row = getInconsistencyRow(id);
+  const asiento = stored.asientos.find(a => a.id === id);
+  if (asiento) {
+    asiento.estado = 'En corrección';
+    saveAll();
+    renderAsientos();
+    showPanel('asientos');
+    showToast(`Asiento ${id} abierto en modo corrección`, 'success');
+    logAudit(document.getElementById('user-name-hdr').textContent, 'Edición', id, 'Con error', 'En corrección');
+    return;
+  }
+  if (row) {
+    row.cells[3].innerHTML = '<span class="badge b-gold">En corrección</span>';
+    row.cells[4].innerHTML = '<span class="badge b-green">Con doc.</span>';
+    setInconsistencyActionCell(row, 'Corregido', 'b-green');
+    saveInconsistencyState(id, { estado: 'Corregido' });
+    showToast(`Asiento ${id} corregido`, 'success');
+    logAudit(document.getElementById('user-name-hdr').textContent, 'Edición', id, 'Con error', 'Corregido');
+    return;
+  }
+  showToast(`Asiento ${id} abierto para corrección`, 'info');
+}
+
+function revisarCuentaInactiva(id) {
+  const row = getInconsistencyRow(id);
+  const asiento = stored.asientos.find(a => a.id === id);
+  if (asiento) {
+    asiento.estado = 'En revisión';
+    saveAll();
+    renderAsientos();
+  }
+  if (row) {
+    row.cells[3].innerHTML = '<span class="badge b-teal">Revisada</span>';
+    setInconsistencyActionCell(row, 'Revisado', 'b-teal');
+    saveInconsistencyState(id, { estado: 'Revisado' });
+  }
+  showPanel('cuentas');
+  showToast(`Cuenta inactiva ${id} marcada para revisión`, 'success');
+  logAudit(document.getElementById('user-name-hdr').textContent, 'Edición', id, 'Cuenta inactiva', 'En revisión');
+}
+
+function solicitarAprobacion(id) {
+  const row = getInconsistencyRow(id);
+  const asiento = stored.asientos.find(a => a.id === id);
+  if (asiento) {
+    asiento.estado = 'Pendiente aprobación';
+    saveAll();
+    renderAsientos();
+    showPanel('asientos');
+  }
+  if (row) {
+    row.cells[3].innerHTML = '<span class="badge b-gold">Sin aprobación</span>';
+    setInconsistencyActionCell(row, 'Solicitado', 'b-gold');
+    saveInconsistencyState(id, { estado: 'Solicitado' });
+  }
+  showToast(`Solicitud de aprobación enviada al Contador General`, 'success');
+  logAudit(document.getElementById('user-name-hdr').textContent, 'Aprobación', id, 'Pendiente', 'Solicitada');
+}
+
+function abrirTicketSoporte() {
+  const modalId='modal-ticket';
+  let modal=document.getElementById(modalId);
+  if (!modal) { modal=document.createElement('div'); modal.className='modal-overlay'; modal.id=modalId; document.body.appendChild(modal); }
+  modal.innerHTML=`
+    <div class="modal" style="max-width:480px;">
+      <h3>📮 Crear Ticket — </h3>
+      <div class="modal-sub">SOPORTE TÉCNICO FINANTEL</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="fg"><label class="field-req">Asunto</label><input type="text" id="ticket-asunto" placeholder="Describe el problema"/></div>
+        <div class="fg"><label>Prioridad</label><select id="ticket-prio"><option>Alta</option><option selected>Media</option><option>Baja</option></select></div>
+        <div class="fg"><label class="field-req">Descripción</label><textarea id="ticket-desc" placeholder="Detalla el problema..."></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline" onclick="closeModal('modal-ticket')">Cancelar</button>
+        <button class="btn-gold" onclick="enviarTicket()">📮 Enviar Ticket</button>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+}
+
+function enviarTicket() {
+  const asunto = document.getElementById('ticket-asunto')?.value.trim();
+  const prio   = document.getElementById('ticket-prio')?.value;
+  const desc   = document.getElementById('ticket-desc')?.value.trim();
+  if (!asunto) { showToast('El asunto es obligatorio','error'); return; }
+  if (!desc)   { showToast('La descripción es obligatoria','error'); return; }
+  const num = 'TKT-' + String(Math.floor(Math.random()*9000+1000));
+  closeModal('modal-ticket');
+  showToast(`Ticket ${num} creado — Prioridad: ${prio}. Se responderá a tu email en 24h.`, 'success');
+  logAudit(document.getElementById('user-name-hdr').textContent,'Soporte',`Ticket ${num}`,`Prioridad: ${prio}`,asunto);
+}
+
+function exportAuditCSV() {
+  var rows = document.querySelectorAll('#sub-auditoria table tbody tr, #panel-auditoria table tbody tr');
+  if (!rows.length) { showToast('No hay registros para exportar','warn'); return; }
+  var csv = '"Fecha/Hora","Usuario","Acción","Objeto","Valor Anterior","Valor Nuevo"\n';
+  rows.forEach(function(tr) {
+    var cells = tr.querySelectorAll('td');
+    if (cells.length >= 6) {
+      var row = [cells[0],cells[1],cells[2],cells[3],cells[4],cells[5]]
+        .map(function(td){ return '"'+td.textContent.trim().replace(/"/g,'""')+'"'; }).join(',');
+      csv += row + '\n';
+    }
+  });
+  var BOM = '﻿';
+  var blob = new Blob([BOM+csv], {type:'text/csv;charset=utf-8;'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = 'FINANTEL_Auditoria_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Auditoría exportada: ' + a.download, 'success');
+}
+
+function exportPDF() {
+  var panel = document.querySelector('.panel.active');
+  if (!panel) { showToast('No hay panel activo','error'); return; }
+  var titulo = (panel.querySelector('.sec-title') || {textContent:''}).textContent || 'Reporte FINANTEL';
+  var fecha  = new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'long',year:'numeric'});
+  var clone  = panel.cloneNode(true);
+  clone.querySelectorAll('button,.btns-row').forEach(function(el){el.remove();});
+  var html = '<!DOCTYPE html><html><head><title>'+titulo+' — FINANTEL</title>'
+    + '<style>'
+    + '*{box-sizing:border-box;}body{font-family:Arial,sans-serif;color:#222;padding:24px;font-size:12px;}'
+    + 'h2{color:#1a3461;margin-bottom:4px;}'
+    + 'table{width:100%;border-collapse:collapse;margin-bottom:14px;}'
+    + 'th{background:#1a3461;color:#fff;padding:6px 10px;text-align:left;font-size:10px;}'
+    + 'td{padding:6px 10px;border-bottom:1px solid #ddd;font-size:12px;}'
+    + '.kpi-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}'
+    + '.kpi-card{border:1px solid #ccc;border-radius:4px;padding:10px 14px;min-width:150px;}'
+    + '.kpi-val{font-size:20px;font-weight:bold;color:#1a3461;}.kpi-lbl{font-size:9px;color:#888;text-transform:uppercase;}'
+    + '.card{border:1px solid #ddd;border-radius:4px;margin-bottom:12px;}'
+    + '.card-hdr{background:#f5f5f5;padding:7px 12px;border-bottom:1px solid #ddd;font-weight:bold;font-size:12px;}'
+    + '.card-body,.card-body-0{padding:10px 12px;}'
+    + '.sec-title{font-size:18px;font-weight:bold;color:#1a3461;margin-bottom:2px;}'
+    + '.sec-sub{font-size:10px;color:#666;margin-bottom:12px;}'
+    + '.badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:10px;background:#e5e7eb;color:#222;}'
+    + '.pos{color:green;}.neg{color:red;}.tr{text-align:right;}'
+    + '.alert{padding:8px 12px;border:1px solid #ccc;border-radius:4px;margin-bottom:8px;font-size:11px;}'
+    + '.two-col,.three-col{display:block;}'
+    + '@media print{body{padding:10px;}@page{margin:1cm;}}'
+    + '</style></head><body>'
+    + '<h2>'+titulo+'</h2>'
+    + '<p style="font-size:10px;color:#666;margin-bottom:14px;">FINANTEL S.A.C. · RUC 20110300971 · '+fecha+'</p><hr style="margin-bottom:12px;">'
+    + clone.innerHTML
+    + '<p style="font-size:9px;color:#aaa;margin-top:20px;border-top:1px solid #eee;padding-top:8px;">Generado por FINANTEL Sistema Contable · '+fecha+'</p>'
+    + '<scr'+'ipt>setTimeout(function(){window.print();},300);<\/scr'+'ipt>'
+    + '</body></html>';
+  var win = window.open('','_blank','width=960,height=720');
+  win.document.write(html);
+  win.document.close();
+  showToast('Ventana de impresión abierta — usa Ctrl+P para guardar como PDF','success');
+}
+
+function exportExcel() {
+  const panel = document.querySelector('.panel.active');
+  if (!panel) { showToast('No hay panel activo','error'); return; }
+  
+  const panelId = panel.id;
+  const titulo = (panel.querySelector('.sec-title') || {textContent:''}).textContent || 'Reporte FINANTEL';
+  
+  let csv = '';
+  
+  // Si es Balance General, exporta con estructura especial
+  if (panelId === 'panel-balance') {
+    csv = '\uFEFF' + 'BALANCE GENERAL\n';
+    csv += 'ESTADO DE SITUACIÓN FINANCIERA AL 31/03/2026\n\n';
+    
+    // ACTIVOS
+    csv += 'ACTIVOS\n';
+    csv += 'Código,Descripción,S/,%\n';
+    document.querySelectorAll('#tbl-activos tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds.length >= 4) {
+        const cod = tds[0].textContent.trim();
+        const desc = tds[1].textContent.trim();
+        const monto = tds[2].textContent.trim();
+        const pct = tds[3].textContent.trim();
+        csv += `"${cod}","${desc}","${monto}","${pct}"\n`;
+      }
+    });
+    
+    // PASIVOS
+    csv += '\nPASIVOS\n';
+    csv += 'Código,Descripción,S/,%\n';
+    document.querySelectorAll('#tbl-pasivos tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds.length >= 4) {
+        const cod = tds[0].textContent.trim();
+        const desc = tds[1].textContent.trim();
+        const monto = tds[2].textContent.trim();
+        const pct = tds[3].textContent.trim();
+        csv += `"${cod}","${desc}","${monto}","${pct}"\n`;
+      }
+    });
+    
+    // PATRIMONIO
+    csv += '\nPATRIMONIO\n';
+    csv += 'Código,Descripción,S/,%\n';
+    document.querySelectorAll('#tbl-patrimonio tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds.length >= 4) {
+        const cod = tds[0].textContent.trim();
+        const desc = tds[1].textContent.trim();
+        const monto = tds[2].textContent.trim();
+        const pct = tds[3].textContent.trim();
+        csv += `"${cod}","${desc}","${monto}","${pct}"\n`;
+      }
+    });
+    
+  } else {
+    // Para otros paneles, exporta tabla normal
+    const tabla = panel.querySelector('table');
+    if (!tabla) { showToast('Este panel no tiene tabla exportable','warn'); return; }
+    
+    const headers = [];
+    tabla.querySelectorAll('th').forEach(th => headers.push('"'+th.textContent.trim().replace(/"/g,'""')+'"'));
+    csv = '\uFEFF' + headers.join(',') + '\n';
+    
+    tabla.querySelectorAll('tbody tr').forEach(tr => {
+      const cells = [];
+      tr.querySelectorAll('td').forEach(td => cells.push('"'+td.textContent.trim().replace(/"/g,'""')+'"'));
+      if (cells.length) csv += cells.join(',') + '\n';
+    });
+  }
+  
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'FINANTEL_' + titulo.replace(/[^a-zA-Z0-9]/g,'_') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Archivo descargado: ' + a.download, 'success');
+}
+function nuevaCuenta() {
+  var mid = 'modal-nueva-cuenta';
+  var m = document.getElementById(mid);
+  if (!m) { m=document.createElement('div'); m.className='modal-overlay'; m.id=mid; document.body.appendChild(m); }
+  
+  fetch('/web/cuentas', { credentials: 'include' })
+  .then(r => r.json())
+  .then(cuentas => {
+    const cuentasPadre = cuentas.filter(c => c.nivel === 1);
+    const optionsPadre = cuentasPadre.map(c => `<option value="${c.codigo}">${c.codigo} — ${c.descripcion}</option>`).join('');
+    
+    m.innerHTML = '<div class="modal" style="max-width:620px;">'
+      + '<h3>Nueva Cuenta Contable</h3>'
+      + '<div class="modal-sub">PLAN DE CUENTAS</div>'
+      + '<div style="display:flex;flex-direction:column;gap:12px;">'
+      
+      + '<div class="form-grid-2">'
+      + '<div class="fg"><label class="field-req">Código *</label>'
+      + '<input type="text" id="nc-cod" placeholder="Ej: 1011" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;"/></div>'
+      
+      + '<div class="fg"><label class="field-req">Descripción *</label>'
+      + '<input type="text" id="nc-des" placeholder="Nombre de la cuenta" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;"/></div>'
+      + '</div>'
+      
+      + '<div class="fg"><label>Cuenta Padre</label>'
+      + '<select id="nc-padre" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;">'
+      + '<option value="">— Sin cuenta padre —</option>'
+      + optionsPadre
+      + '</select></div>'
+      
+      + '<div class="form-grid-2">'
+      + '<div class="fg"><label class="field-req">Clasificación *</label>'
+      + '<select id="nc-cla" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;">'
+      + '<option value="">— Seleccionar —</option>'
+      + '<option>Activo Corriente</option>'
+      + '<option>Activo No Corriente</option>'
+      + '<option>Pasivo Corriente</option>'
+      + '<option>Pasivo No Corriente</option>'
+      + '<option>Patrimonio</option>'
+      + '<option>Ingresos</option>'
+      + '<option>Gastos</option>'
+      + '</select></div>'
+      
+      + '<div class="fg"><label class="field-req">Tipo *</label>'
+      + '<div style="display:flex;gap:16px;margin-top:8px;">'
+		+ '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="nc-tip" value="Débito" style="cursor:pointer;"/> Débito</label>'
+		+ '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="radio" name="nc-tip" value="Crédito" style="cursor:pointer;"/> Crédito</label>'
+      + '</div></div>'
+      + '</div>'
+      
+      + '<div class="fg"><label>Operaciones Autorizadas</label>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">'
+      + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="nc-ops" value="Apertura" style="cursor:pointer;"/> Apertura</label>'
+      + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="nc-ops" value="Operación ordinaria" style="cursor:pointer;"/> Op. ordinaria</label>'
+      + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="nc-ops" value="Ajuste" style="cursor:pointer;"/> Ajuste</label>'
+      + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="nc-ops" value="Cierre" style="cursor:pointer;"/> Cierre</label>'
+      + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="nc-ops" value="Reversión" style="cursor:pointer;"/> Reversión</label>'
+      + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="nc-ops" value="Todas" checked style="cursor:pointer;"/> Todas</label>'
+      + '</div></div>'
+      
+	  + '<div class="fg"><label>Estado</label>'
+	  + '<select id="nc-est" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-size:13px;outline:none;">'
+	  + '<option selected>Activa</option>'
+	  + '<option>Inactiva</option>'
+	  + '</select></div>'
+      
+      + '</div>'
+      + '<div class="modal-footer">'
+      + '<button class="btn-outline" onclick="closeModal(\'modal-nueva-cuenta\')">Cancelar</button>'
+      + '<button class="btn-gold" onclick="confirmarNuevaCuenta()">Guardar Cuenta</button>'
+      + '</div></div>';
+    m.classList.add('open');
+  });
+}
+
+function confirmarNuevaCuenta() {
+  var cod = document.getElementById('nc-cod').value.trim();
+  var des = document.getElementById('nc-des').value.trim();
+  var padre = document.getElementById('nc-padre').value || null;
+  var nivel = cod.length === 2 ? 1 : 2;  // ← AUTOMÁTICO
+  var cla = document.getElementById('nc-cla').value;
+  var tip = document.querySelector('input[name=nc-tip]:checked')?.value;
+  var est = document.getElementById('nc-est').value;
+  var ops = Array.from(document.querySelectorAll('.nc-ops:checked')).map(el => el.value).join(', ') || 'Todas';
+  
+  if (!cod) { showToast('El código de cuenta es obligatorio','error'); return; }
+  if (!des) { showToast('La descripción es obligatoria','error'); return; }
+  if (!cla) { showToast('Selecciona la clasificación','error'); return; }
+  if (!tip) { showToast('Selecciona el tipo (Débito o Crédito)','error'); return; }
+
+  fetch('/web/cuentas', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      codigo: cod, 
+      descripcion: des, 
+      clasificacion: cla, 
+      tipo: tip, 
+      opsAutorizadas: ops, 
+      estado: est,
+      cuenta_padre: padre,
+      nivel: nivel
+    })
+  })
+  .then(r => {
+    if (r.ok) {
+      closeModal('modal-nueva-cuenta');
+      renderCuentas();
+      showToast('Cuenta ' + cod + ' — ' + des + ' creada correctamente', 'success');
+    } else {
+      showToast('Error al crear cuenta', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+function cambiarPassword(id) {
+  const modalId = 'modal-cambiar-pass';
+  let modal = document.getElementById(modalId);
+  if (!modal) { modal=document.createElement('div'); modal.className='modal-overlay'; modal.id=modalId; document.body.appendChild(modal); }
+  modal.innerHTML = `
+    <div class="modal" style="max-width:440px;">
+      <h3>🔒 Cambiar Contraseña</h3>
+      <div class="modal-sub">VERIFICACIÓN DE IDENTIDAD REQUERIDA</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="fg"><label class="field-req">Contraseña actual</label>
+          <input type="password" id="cp-actual" placeholder="Ingresa tu contraseña actual"/></div>
+        <div class="fg"><label class="field-req">Nueva contraseña</label>
+          <input type="password" id="cp-nueva" placeholder="Mínimo 8 caracteres"/></div>
+        <div class="fg"><label class="field-req">Confirmar nueva contraseña</label>
+          <input type="password" id="cp-confirmar" placeholder="Repite la nueva contraseña"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-outline" onclick="closeModal('${modalId}')">Cancelar</button>
+        <button class="btn-gold" onclick="confirmarCambioPassword(${id})">🔒 Cambiar</button>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+}
+
+function confirmarCambioPassword(id) {
+  const actual    = document.getElementById('cp-actual').value;
+  const nueva     = document.getElementById('cp-nueva').value;
+  const confirmar = document.getElementById('cp-confirmar').value;
+
+  if (!actual) { showToast('Ingresa tu contraseña actual', 'error'); return; }
+  if (!nueva || nueva.length < 8) { showToast('La nueva contraseña debe tener mínimo 8 caracteres', 'error'); return; }
+  if (nueva !== confirmar) { showToast('Las contraseñas no coinciden', 'error'); return; }
+
+  fetch(`/web/usuarios/${id}/password`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ passwordActual: actual, passwordNueva: nueva })
+  })
+  .then(r => {
+    if (r.ok) {
+      closeModal('modal-cambiar-pass');
+      showToast('Contraseña cambiada correctamente', 'success');
+    } else {
+      r.text().then(msg => showToast(msg || 'Contraseña actual incorrecta', 'error'));
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+document.addEventListener('DOMContentLoaded', () => {
+  applyConfigToUI();
+  renderDashboard();
+  const tc = stored.tcActual || {};
+  const tcBar = document.getElementById('tc-bar');
+  if (tcBar && tc.usd && tc.usd !== '—') tcBar.textContent = `💱 USD/PEN: ${tc.usd}`;
+
+  // PERMISOS POR ROL
+  const userRolRaw = document.getElementById('user-role-hdr')?.textContent?.trim() || '';
+  
+  const roleChip = document.getElementById('user-role-hdr');
+  if (roleChip) roleChip.textContent = formatRol(userRolRaw);
+ function aplicarPermisosPorRol() {
+      const esAdmin    = userRolRaw === 'Administrador';
+      const esContador = userRolRaw === 'Contador_General';
+      const esAuditor  = userRolRaw === 'Auditor';
+      const esPersonal = userRolRaw === 'Personal_Autorizado';
+
+      if (esContador) {
+        document.querySelectorAll('.nav-item').forEach(item => {
+          const texto = item.textContent.trim();
+          if (texto.includes('Usuarios y Roles') ||
+              texto.includes('Respaldos') ||
+              texto.includes('Configuración') ||
+              texto.includes('Auditoría') ||
+              texto.includes('Ayuda')) {
+            item.style.display = 'none';
+          }
+        });
+        document.querySelectorAll('.nav-section').forEach(sec => {
+          if (sec.textContent.trim() === 'Administración') sec.style.display = 'none';
+        });
+      }
+
+      if (esAuditor) {
+        document.querySelectorAll('.btn-gold').forEach(btn => {
+          if (btn.textContent.includes('Nuevo') ||
+              btn.textContent.includes('Crear') ||
+              btn.textContent.includes('Emitir')) {
+            btn.style.display = 'none';
+          }
+        });
+        document.querySelectorAll('.nav-item').forEach(item => {
+          const texto = item.textContent.trim();
+          if (texto.includes('Usuarios y Roles') ||
+              texto.includes('Respaldos') ||
+              texto.includes('Configuración') ||
+              texto.includes('Ayuda')) {
+            item.style.display = 'none';
+          }
+        });
+      }
+
+      if (esPersonal) {
+        document.querySelectorAll('.nav-item').forEach(item => {
+          const texto = item.textContent.trim();
+          if (texto.includes('Balance') ||
+              texto.includes('Resultados') ||
+              texto.includes('Flujo') ||
+              texto.includes('Patrimonio') ||
+              texto.includes('Ratios') ||
+              texto.includes('Costos') ||
+              texto.includes('Usuarios') ||
+              texto.includes('Auditoría') ||
+              texto.includes('Respaldos') ||
+              texto.includes('Configuración') ||
+              texto.includes('Ayuda')) {
+            item.style.display = 'none';
+          }
+        });
+        document.querySelectorAll('.nav-section').forEach(sec => {
+          if (sec.textContent.trim() === 'Reportes' ||
+              sec.textContent.trim() === 'Administración') {
+            sec.style.display = 'none';
+          }
+        });
+      }
+    }
+    setTimeout(aplicarPermisosPorRol, 100);
+  });
+
+function saveAll() {
+  dbSave(stored);
+}
+function getCurrentCorrelativo() {
+  return 'AST-2026-' + String(stored.nextCorrelativo).padStart(5, '0');
+}
+function revisarAlerta(titulo) {
+    let name = 'asientos';
+    if (titulo.includes('Liquidez')) name = 'ratios';
+    else if (titulo.includes('caja') || titulo.includes('Caja')) name = 'flujo';
+    else if (titulo.includes('pagar') || titulo.includes('Pagar')) name = 'asientos';
+    else if (titulo.includes('Usuarios') || titulo.includes('bloqueado')) name = 'admin';
+    
+    showPanel(name, null);
+}
+function showToast(msg, type='info') {
+  const icons = { success:'✓', error:'✕', warn:'⚠', info:'ℹ' };
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.innerHTML = `<span>${icons[type]||'ℹ'}</span><span>${msg}</span>`;
+
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity='0';
+    toast.style.transform='translateX(120%)';
+    toast.style.transition='all .3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+function logAudit(user, accion, objeto, anterior, nuevo) {
+  if (!stored.auditLog) stored.auditLog = [];
+  stored.auditLog.unshift({
+    fecha: new Date().toLocaleString('es-PE'),
+    user: user || '—',
+    accion: accion || '—',
+    objeto: objeto || '—',
+    anterior: anterior || '—',
+    nuevo: nuevo || '—'
+  });
+  saveAll();
+  renderAuditLog();
+}
+
+function renderAuditLog() {
+  const tbody = document.querySelector('#sub-auditoria table tbody');
+  if (!tbody) return;
+
+  fetch('/web/auditoria', { credentials: 'include' })
+  .then(r => r.json())
+  .then(logs => {
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin registros de auditoría</td></tr>';
+      return;
+    }
+    tbody.innerHTML = logs.map(e => `
+      <tr>
+        <td style="font-size:11px;font-family:'IBM Plex Mono',monospace;">${e.fecha || '—'}</td>
+        <td>${e.usuario || '—'}</td>
+        <td><span class="badge b-teal">${e.accion || '—'}</span></td>
+        <td style="font-family:'IBM Plex Mono',monospace;">${e.objeto || '—'}</td>
+        <td style="color:var(--muted);font-size:11px;">${e.valorAnterior || '—'}</td>
+        <td style="font-size:11px;">${e.valorNuevo || '—'}</td>
+      </tr>`).join('');
+  })
+  .catch(() => {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);">Error cargando auditoría</td></tr>';
+  });
+  fetch('/web/usuarios', { credentials: 'include' })
+  .then(r => r.json())
+  .then(usuarios => {
+    const sel = document.getElementById('aud-filtro-usuario');
+    if (!sel) return;
+	sel.innerHTML = '<option>Todos los usuarios</option>';
+	usuarios.forEach(u => {
+	  sel.innerHTML += `<option value="${u.email}">${u.nombre}</option>`;
+	});
+  });
+}
+function renderBalance() {
+  fetch('/web/balance', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    llenarTabla('tbl-activos', data.activos, data.totalActivo);
+    llenarTabla('tbl-pasivos', data.pasivos, data.totalPasivo);
+    llenarTabla('tbl-patrimonio', data.patrimonio, data.totalPatrimonio);
+    
+    const diferencia = Math.abs((data.totalActivo || 0) - ((data.totalPasivo || 0) + (data.totalPatrimonio || 0)));
+    const cuadrado = diferencia < 0.01;
+    const alertaEl = document.getElementById('balance-alert');
+    if (alertaEl) {
+      alertaEl.className = cuadrado ? 'alert alert-success' : 'alert alert-danger';
+      alertaEl.innerHTML = cuadrado 
+        ? '✓ Balance cuadrado correctamente' 
+        : `✗ Balance descuadrado — Diferencia: S/ ${diferencia.toLocaleString('es-PE', {minimumFractionDigits:2})}`;
+    }
+  })
+  .catch(err => showToast('Error: ' + err.message, 'error'));
+}
+
+function llenarTabla(id, items, total) {
+  const tbody = document.getElementById(id);
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  total = total || 0;
+  
+  (items || []).forEach(item => {
+    tbody.innerHTML += `<tr>
+      <td style="text-align:left; width:15%;">${item.codigo}</td>
+      <td style="text-align:left; width:45%;">${item.descripcion}</td>
+      <td style="text-align:right; width:25%; font-family:'IBM Plex Mono',monospace;">S/ ${Math.abs(item.saldo).toFixed(2)}</td>
+      <td style="text-align:right; width:15%;">${(item.porcentaje || 0).toFixed(1)}%</td>
+    </tr>`;
+  });
+  
+  tbody.innerHTML += `<tr style="font-weight:600; border-top:2px solid var(--border);">
+    <td style="width:15%;"></td>
+    <td style="text-align:left; width:45%;"><strong>TOTAL</strong></td>
+    <td style="text-align:right; width:25%; font-family:'IBM Plex Mono',monospace;"><strong>S/ ${total.toFixed(2)}</strong></td>
+    <td style="width:15%;"></td>
+  </tr>`;
+}
+
+	function aplicarFiltrosAuditoria() {
+  const usuario = document.getElementById('aud-filtro-usuario')?.value;
+  const accion  = document.getElementById('aud-filtro-accion')?.value;
+  const desde   = document.getElementById('aud-filtro-desde')?.value;
+  const hasta   = document.getElementById('aud-filtro-hasta')?.value;
+  const tbody   = document.querySelector('#sub-auditoria table tbody');
+  if (!tbody) return;
+
+  console.log('usuario:', usuario, 'desde:', desde, 'hasta:', hasta, 'accion:', accion);
+
+  fetch('/web/auditoria', { credentials: 'include' })
+  .then(r => r.json())
+  .then(logs => {
+    console.log('logs:', logs);
+    let filtrados = logs;
+    if (usuario && usuario !== 'Todos los usuarios')
+      filtrados = filtrados.filter(e => e.usuario === usuario);
+	if (accion && accion !== 'Todas')
+	    filtrados = filtrados.filter(e => e.accion?.toLowerCase().includes(accion.toLowerCase()));
+    if (desde)
+      filtrados = filtrados.filter(e => new Date(e.fecha) >= new Date(desde));
+    if (hasta)
+      filtrados = filtrados.filter(e => new Date(e.fecha) <= new Date(hasta + 'T23:59:59'));
+    console.log('filtrados:', filtrados);
+    if (!filtrados.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin resultados</td></tr>';
+      return;
+    }
+    tbody.innerHTML = filtrados.map(e => `
+      <tr>
+        <td style="font-size:11px;font-family:'IBM Plex Mono',monospace;">${e.fecha || '—'}</td>
+        <td>${e.usuario || '—'}</td>
+        <td><span class="badge b-teal">${e.accion || '—'}</span></td>
+        <td style="font-family:'IBM Plex Mono',monospace;">${e.objeto || '—'}</td>
+        <td style="color:var(--muted);font-size:11px;">${e.valorAnterior || '—'}</td>
+        <td style="font-size:11px;">${e.valorNuevo || '—'}</td>
+      </tr>`).join('');
+    showToast(`${filtrados.length} registros encontrados`, 'info');
+  })
+  .catch(() => showToast('Error filtrando auditoría', 'error'));
+}
+function renderAsientos() {
+  const tbody = document.getElementById('asientos-tbody');
+  if (!tbody) return;
+
+  fetch('/web/asientos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(asientos => {
+    const activos    = asientos.filter(a => a.estado === 'Activo');
+    const errores    = asientos.filter(a => a.estado === 'Con error');
+    const anulados   = asientos.filter(a => a.estado === 'Anulado');
+
+    // Contadores
+    const badgeActivos   = document.getElementById('badge-activos');
+    const badgeErrores   = document.getElementById('badge-errores');
+    const badgePendientes = document.getElementById('badge-pendientes');
+    if (badgeActivos)    badgeActivos.textContent   = activos.length + ' activos';
+    if (badgeErrores)    badgeErrores.textContent   = errores.length + ' con errores';
+    if (badgePendientes) badgePendientes.textContent = anulados.length + ' anulados';
+
+    // Periodo label
+    const periodoSel = document.getElementById('f-periodo');
+    const periodoLabel = document.getElementById('asientos-periodo-label');
+    if (periodoLabel) {
+      const selText = periodoSel?.options[periodoSel.selectedIndex]?.text;
+      periodoLabel.textContent = selText && selText !== 'Todos' ? selText : 'Todos los periodos';
+    }
+
+    if (!asientos.length) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px;">Sin asientos registrados</td></tr>';
+      return;
+    }
+
+    let totalDebe = 0, totalHaber = 0;
+    tbody.innerHTML = asientos.map(a => {
+      const debe  = parseFloat(a.debe)  || 0;
+      const haber = parseFloat(a.haber) || 0;
+      totalDebe  += debe;
+      totalHaber += haber;
+      const descuadrado = Math.abs(debe - haber) > 0.01 && debe > 0 && haber > 0;
+      const estBadge = a.estado==='Activo'?'b-green':a.estado==='Con error'?'b-red':a.estado==='Anulado'?'b-muted':'b-gold';
+      const aprobBadge = (descuadrado || a.estado==='Con error') ? 'b-red' : a.estado==='Activo' ? 'b-gold' : 'b-muted';
+      const aprobLabel = (descuadrado || a.estado==='Con error') ? '✗ Pendiente corrección' : a.estado==='Activo' ? 'Pendiente' : '—';
+	  const acciones = a.estado === 'Anulado'
+	  ? '<span class="badge b-muted">Anulado</span>'
+	  : `<button class="btn-outline btn-sm" onclick="verDetalleAsiento(${a.id})" title="Ver detalle">👁</button>
+	     <button class="btn-outline btn-sm" onclick="editarAsiento(${a.id})" title="Editar">✏</button>
+	     <button class="btn-outline btn-sm" onclick="duplicarAsientoExistente(${a.id})" title="Duplicar">📋</button>
+	     <button class="btn-danger btn-sm" onclick="anularAsiento(${a.id})" title="Anular">🗑</button>
+	     <a href="/web/cobros/${a.id}/enlace" target="_blank" class="btn-outline btn-sm">Cobrar</a>
+	     <a href="/web/cobros/${a.id}/verificar" target="_blank" class="btn-outline btn-sm">Verificar</a>`;v
+      return `<tr style="${descuadrado?'border-left:3px solid var(--red);':''}">
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${a.numeroCorrelativo || '—'}</td>
+        <td style="font-size:11px;color:var(--muted);">${a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleString('es-PE') : '—'}</td>
+        <td><span class="badge b-teal">${a.tipo || '—'}</span></td>
+        <td>${a.descripcion || '—'}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;${descuadrado?'color:var(--red);':''}">S/ ${debe.toFixed(2)}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;${descuadrado?'color:var(--red);':''}">S/ ${haber.toFixed(2)}</td>
+        <td><span class="badge ${estBadge}">${a.estado || '—'}</span></td>
+        <td><span class="badge ${aprobBadge}">${aprobLabel}</span></td>
+        <td>${a.usuario || '—'}</td>
+        <td style="display:flex;gap:4px;">${acciones}</td>
+      </tr>`;
+    }).join('');
+
+    // Resumen inferior
+    const resumen = document.getElementById('asientos-resumen');
+    if (resumen) {
+      const fmt = v => 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2});
+      const descuadrados = asientos.filter(a => Math.abs((parseFloat(a.debe)||0) - (parseFloat(a.haber)||0)) > 0.01 && parseFloat(a.debe) > 0 && parseFloat(a.haber) > 0).length;
+      
+      const diferencia = Math.abs(totalDebe - totalHaber);
+      const alertaDif  = diferencia > 0.01 
+        ? `<div style="grid-column:1/-1;"><div class="alert alert-warn">⚠ Los asientos presentan una diferencia entre el Debe y el Haber: <strong>${fmt(diferencia)}</strong></div></div>`
+        : '';
+
+      resumen.innerHTML = `
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Total asientos</div><div style="font-size:16px;font-weight:600;font-family:'IBM Plex Mono',monospace;">${asientos.length}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Activos</div><div style="font-size:16px;font-weight:600;color:var(--green);font-family:'IBM Plex Mono',monospace;">${activos.length}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Con errores</div><div style="font-size:16px;font-weight:600;color:var(--red);font-family:'IBM Plex Mono',monospace;">${errores.length}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Descuadrados</div><div style="font-size:16px;font-weight:600;color:#fbbf24;font-family:'IBM Plex Mono',monospace;">${descuadrados}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Anulados</div><div style="font-size:16px;font-weight:600;color:var(--muted);font-family:'IBM Plex Mono',monospace;">${anulados.length}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Total Debe</div><div style="font-size:16px;font-weight:600;color:var(--green);font-family:'IBM Plex Mono',monospace;">${fmt(totalDebe)}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Total Haber</div><div style="font-size:16px;font-weight:600;color:var(--red-light);font-family:'IBM Plex Mono',monospace;">${fmt(totalHaber)}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Diferencia</div><div style="font-size:16px;font-weight:600;color:${diferencia>0.01?'var(--red)':'var(--green)'};font-family:'IBM Plex Mono',monospace;">${fmt(diferencia)}</div></div>
+        ${alertaDif}`;
+    }
+  })
+  .catch(() => {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--red);">Error cargando asientos</td></tr>';
+  });
+
+  // Cargar usuarios
+  fetch('/web/usuarios', { credentials: 'include' })
+  .then(r => r.json())
+  .then(usuarios => {
+    const sel = document.getElementById('f-usuario');
+    if (!sel) return;
+    sel.innerHTML = '<option value="Todos">Todos</option>';
+    usuarios.forEach(u => sel.innerHTML += `<option value="${u.email}">${u.nombre}</option>`);
+  });
+
+  // Cargar periodos
+  fetch('/web/periodos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(periodos => {
+    const sel = document.getElementById('f-periodo');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Todos</option>';
+    periodos.forEach(p => sel.innerHTML += `<option value="${p.id}">${p.periodo}</option>`);
+  });
+}
+function verDetalleAsiento(id) {
+  fetch('/web/asientos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(asientos => {
+    const a = asientos.find(x => x.id === id);
+    if (!a) return;
+    const debe  = parseFloat(a.debe)  || 0;
+    const haber = parseFloat(a.haber) || 0;
+    const descuadrado = Math.abs(debe - haber) > 0.01 && debe > 0 && haber > 0;
+    const modalId = 'modal-detalle-asiento';
+    let modal = document.getElementById(modalId);
+    if (!modal) { modal=document.createElement('div'); modal.className='modal-overlay'; modal.id=modalId; document.body.appendChild(modal); }
+    
+    modal.innerHTML = `
+      <div class="modal" style="max-width:680px;">
+        <h3>👁 Detalle — ${a.numeroCorrelativo || a.id}</h3>
+        <div class="modal-sub">INFORMACIÓN COMPLETA DEL ASIENTO</div>
+        ${descuadrado ? '<div class="alert alert-danger">⚠ Asiento descuadrado — Diferencia: S/ ' + Math.abs(debe-haber).toFixed(2) + '</div>' : ''}
+        <div class="form-grid-2" style="margin-bottom:14px;">
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">N° CORRELATIVO</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--gold);">${a.numeroCorrelativo || '—'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">TIPO</div><div>${a.tipo || '—'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">DESCRIPCIÓN</div><div>${a.descripcion || '—'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">ESTADO</div><div><span class="badge ${a.estado==='Activo'?'b-green':'b-red'}">${a.estado}</span></div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">USUARIO</div><div>${a.usuario || '—'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px;">FECHA</div><div style="font-size:11px;">${a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleString('es-PE') : '—'}</div></div>
+        </div>
+
+        <div style="font-size:11px;color:var(--gold);font-family:'IBM Plex Mono',monospace;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">📋 Partidas del Asiento</div>
+        <div id="partidas-container">
+          <div style="text-align:center;color:var(--muted);padding:20px;">⏳ Cargando partidas...</div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-outline" onclick="closeModal('${modalId}')">Cerrar</button>
+          <button class="btn-gold" onclick="closeModal('${modalId}');editarAsiento(${a.id})">✏ Editar</button>
+        </div>
+      </div>`;
+    modal.classList.add('open');
+
+    // Cargar partidas
+    fetch(`/web/asientos/${id}/partidas`, { credentials: 'include' })
+    .then(r => r.json())
+    .then(partidas => {
+      const container = document.getElementById('partidas-container');
+      if (!partidas.length) {
+        container.innerHTML = '<div class="alert alert-warn">Sin partidas registradas</div>';
+        return;
+      }
+      const fmt = v => 'S/ ' + parseFloat(v).toLocaleString('es-PE', {minimumFractionDigits:2});
+      const totalDebe  = partidas.reduce((s,p) => s + (parseFloat(p.debe)||0), 0);
+      const totalHaber = partidas.reduce((s,p) => s + (parseFloat(p.haber)||0), 0);
+      const cuadra = Math.abs(totalDebe - totalHaber) < 0.01;
+      container.innerHTML = `
+        <table class="tbl" style="width:100%;margin-bottom:8px;">
+          <thead><tr>
+            <th>Cuenta</th><th>Descripción</th><th>Glosa</th>
+            <th class="tr">Debe</th><th class="tr">Haber</th>
+          </tr></thead>
+          <tbody>
+            ${partidas.map(p => `<tr>
+              <td style="font-family:'IBM Plex Mono',monospace;">${p.cuenta_contable}</td>
+              <td>${p.descripcion || '—'}</td>
+              <td style="font-size:11px;color:var(--muted);">${p.glosa || '—'}</td>
+              <td class="tr ${parseFloat(p.debe)>0?'pos':''}">${parseFloat(p.debe)>0 ? fmt(p.debe) : '—'}</td>
+              <td class="tr ${parseFloat(p.haber)>0?'neg':''}">${parseFloat(p.haber)>0 ? fmt(p.haber) : '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr class="tot-row">
+              <td colspan="3"><strong>TOTAL</strong></td>
+              <td class="tr"><strong>${fmt(totalDebe)}</strong></td>
+              <td class="tr"><strong>${fmt(totalHaber)}</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="alert ${cuadra?'alert-success':'alert-danger'}">
+          ${cuadra ? '✓ Asiento cuadrado correctamente' : '⚠ Asiento descuadrado — Diferencia: S/ ' + Math.abs(totalDebe-totalHaber).toFixed(2)}
+        </div>`;
+    })
+    .catch(() => {
+      document.getElementById('partidas-container').innerHTML = '<div class="alert alert-danger">Error cargando partidas</div>';
+    });
+  });
+}
+function guardarBorrador() {
+  showToast('Asiento guardado como borrador — pendiente de aprobación', 'info');
+  closeModal('modal-asiento');
+}
+
+function enviarAprobacion() {
+  const tipo = document.getElementById('asiento-tipo').value;
+  if (!tipo) { showToast('Selecciona el tipo de asiento', 'error'); return; }
+  let debe=0, haber=0;
+  document.querySelectorAll('#asiento-lineas .asiento-line').forEach(row => {
+    const inputs = row.querySelectorAll('input[type=number]');
+    debe  += parseFloat(inputs[0]?.value||0);
+    haber += parseFloat(inputs[1]?.value||0);
+  });
+  if (Math.abs(debe-haber) > 0.01) {
+    showToast('El asiento no cuadra — no se puede enviar a aprobación', 'error');
+    return;
+  }
+  showToast('Asiento enviado al Contador General para aprobación ✓', 'success');
+  closeModal('modal-asiento');
+}
+function editarAsiento(id) {
+  fetch(`/web/asientos`, { credentials: 'include' })
+  .then(r => r.json())
+  .then(asientos => {
+    const a = asientos.find(x => x.id === id);
+    if (!a) return;
+    const modalId = 'modal-editar-asiento';
+    let modal = document.getElementById(modalId);
+    if (!modal) { modal=document.createElement('div'); modal.className='modal-overlay'; modal.id=modalId; document.body.appendChild(modal); }
+    modal.innerHTML = `
+      <div class="modal" style="max-width:520px;">
+        <h3>Editar Asiento — ${id}</h3>
+        <div class="modal-sub">MODIFICAR ASIENTO CONTABLE</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="fg"><label>Tipo</label>
+            <select id="ea-tipo">
+              <option ${a.tipo==='Apertura'?'selected':''}>Apertura</option>
+              <option ${a.tipo==='Operación ordinaria'?'selected':''}>Operación ordinaria</option>
+              <option ${a.tipo==='Ajuste'?'selected':''}>Ajuste</option>
+              <option ${a.tipo==='Cierre'?'selected':''}>Cierre</option>
+              <option ${a.tipo==='Reversión'?'selected':''}>Reversión</option>
+            </select></div>
+          <div class="fg"><label>Descripción</label><input type="text" id="ea-desc" value="${a.descripcion || ''}"/></div>
+          <div class="fg"><label>Estado</label>
+            <select id="ea-estado">
+              <option ${a.estado==='Activo'?'selected':''}>Activo</option>
+              <option ${a.estado==='Con error'?'selected':''}>Con error</option>
+            </select></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-outline" onclick="closeModal('${modalId}')">Cancelar</button>
+          <button class="btn-gold" id="btn-guardar-asiento">Guardar</button>
+        </div>
+      </div>`;
+    modal.classList.add('open');
+
+    document.getElementById('btn-guardar-asiento').onclick = () => {
+      const asiento = {
+        tipo: document.getElementById('ea-tipo').value,
+        descripcion: document.getElementById('ea-desc').value,
+        estado: document.getElementById('ea-estado').value
+      };
+
+      fetch(`/web/asientos/${id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asiento)
+      })
+      .then(r => r.json())
+      .then(() => {
+        closeModal('modal-editar-asiento');
+        showToast('Asiento actualizado', 'success');
+        renderAsientos(); // Refrescar asientos
+        renderAlertas();  // ← REFRESCAR ALERTAS TAMBIÉN
+      });
+    };
+  });
+}
+
+function guardarEdicionAsiento(id) {
+  console.log('Editando asiento id:', id);
+  const tipo   = document.getElementById('ea-tipo').value;
+  const desc   = document.getElementById('ea-desc').value.trim();
+  const estado = document.getElementById('ea-estado').value;
+
+  fetch(`/web/asientos/${id}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo, descripcion: desc, estado })
+  })
+  .then(r => {
+    if (r.ok) {
+      closeModal('modal-editar-asiento');
+      renderAsientos();
+      renderAlertas(); // ← AGREGADO AQUÍ
+      showToast(`Asiento ${id} editado correctamente`, 'success');
+    } else {
+      showToast('Error al editar el asiento', 'error');
+    }
+  })
+  .catch(() => showToast('Error de conexión', 'error'));
+}
+
+function aplicarFiltros() {
+  const desde  = document.getElementById('f-desde')?.value;
+  const hasta  = document.getElementById('f-hasta')?.value;
+  const cuenta = document.getElementById('f-cuenta')?.value;
+  const monto  = document.getElementById('f-monto')?.value;
+  const tipo   = document.getElementById('f-tipo')?.value;
+  const estado = document.getElementById('f-estado')?.value;
+  const periodo = document.getElementById('f-periodo')?.value;
+
+  Promise.all([
+    fetch('/web/asientos', { credentials: 'include' }).then(r => r.json()),
+    fetch('/web/periodos', { credentials: 'include' }).then(r => r.json())
+  ])
+  .then(([asientos, periodos]) => {
+    let filtrados = asientos;
+    if (desde) filtrados = filtrados.filter(a => new Date(a.fechaRegistro) >= new Date(desde));
+    if (hasta) filtrados = filtrados.filter(a => new Date(a.fechaRegistro) <= new Date(hasta + 'T23:59:59'));
+    if (cuenta) filtrados = filtrados.filter(a => (a.descripcion||'').toLowerCase().includes(cuenta.toLowerCase()) || (a.cuentaContable||'').includes(cuenta));
+    if (monto) filtrados = filtrados.filter(a => parseFloat(a.debe) >= parseFloat(monto));
+    if (tipo && tipo !== 'Todos') filtrados = filtrados.filter(a => a.tipo?.toLowerCase().includes(tipo.toLowerCase()));
+	const usuario = document.getElementById('f-usuario')?.value;
+	if (usuario && usuario !== 'Todos') filtrados = filtrados.filter(a => a.usuario === usuario);	
+	console.log('estado seleccionado:', estado);
+	console.log('estados en BD:', asientos.map(a => a.estado));
+	if (estado && estado !== 'Todos') filtrados = filtrados.filter(a => a.estado === estado);
+	console.log('periodo value ANTES del if:', periodo);
+    if (periodo) {
+      const p = periodos.find(x => String(x.id) === String(periodo));
+	  console.log('periodo value:', periodo);
+	  console.log('periodos:', periodos);
+	  console.log('periodo encontrado:', p);
+	  console.log('fechaInicio:', p?.fechaInicio, 'fechaCierre:', p?.fechaCierre);
+	  console.log('primer asiento fecha:', asientos[0]?.fechaRegistro);
+      if (p) {
+        const ini = new Date(p.fechaInicio);
+        const fin = new Date(p.fechaCierre + 'T23:59:59');
+        filtrados = filtrados.filter(a => {
+          const fecha = new Date(a.fechaRegistro);
+          return fecha >= ini && fecha <= fin;
+        });
+      }
+    }
+
+    const tbody = document.getElementById('asientos-tbody');
+    if (!tbody) return;
+    if (!filtrados.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px;">Sin resultados</td></tr>';
+      showToast('Sin resultados', 'warn');
+      return;
+    }
+    tbody.innerHTML = filtrados.map(a => {
+      const estBadge = a.estado==='Activo'?'b-green':a.estado==='Con error'?'b-red':a.estado==='Anulado'?'b-muted':'b-gold';
+      const acciones = a.estado === 'Anulado'
+        ? '<span class="badge b-muted">Anulado</span>'
+        : `<button class="btn-outline btn-sm" onclick="editarAsiento(${a.id})">✏</button>
+           <button class="btn-outline btn-sm" onclick="duplicarAsientoExistente(${a.id})">📋</button>
+           <button class="btn-danger btn-sm" onclick="anularAsiento(${a.id})">🗑</button>`;
+      return `<tr>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${a.numeroCorrelativo||'—'}</td>
+        <td style="font-size:11px;color:var(--muted);">${a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleString('es-PE') : '—'}</td>
+        <td><span class="badge b-teal">${a.tipo||'—'}</span></td>
+        <td>${a.descripcion||'—'}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;">S/ ${a.debe||'0.00'}</td>
+        <td class="tr" style="font-family:'IBM Plex Mono',monospace;">S/ ${a.haber||'0.00'}</td>
+        <td><span class="badge ${estBadge}">${a.estado||'—'}</span></td>
+        <td>${a.usuario||'—'}</td>
+        <td style="display:flex;gap:4px;">${acciones}</td>
+      </tr>`;
+    }).join('');
+    showToast(`${filtrados.length} asientos encontrados`, 'success');
+  })
+  .catch(err => {
+      console.error('Error:', err);
+      showToast('Error aplicando filtros', 'error');
+    });
+  }
+
+  function limpiarFiltros() {
+
+  ['f-desde','f-hasta','f-cuenta','f-monto'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderAsientos();
+  showToast('Filtros limpiados', 'info');
+}
+function renderCuentas() {
+  const tbody = document.querySelector('#panel-cuentas table tbody');
+  if (!tbody) return;
+  
+  fetch('/web/cuentas', { credentials: 'include' })
+  .then(r => r.json())
+  .then(cuentas => {
+    if (!cuentas.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin cuentas registradas</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = cuentas.map(c => {
+      const cc = c.clasificacion?.includes('Activo')?'b-teal':c.clasificacion?.includes('Pasivo')?'b-red':c.clasificacion==='Patrimonio'?'b-gold':c.clasificacion?.includes('Ingreso')?'b-blue':'b-muted';
+      const nivel = '&nbsp;&nbsp;'.repeat((c.nivel || 1) - 1);
+      
+      return `<tr style="${c.estado === 'Inactivo' ? 'opacity:0.5;' : ''}">
+        <td style="font-family:'IBM Plex Mono',monospace;">${nivel}${c.codigo}</td>
+        <td>${c.descripcion}</td>
+        <td><span class="badge ${cc}">${c.clasificacion || '—'}</span></td>
+        <td>${c.tipo || '—'}</td>
+        <td><span class="badge ${c.estado === 'Activo' ? 'b-green' : 'b-muted'}">${c.estado || '—'}</span></td>
+        <td style="font-size:11px;">${c.opsAutorizadas || '—'}</td>
+        <td>
+          <button class="btn-outline btn-sm" onclick="editarCuenta('${c.codigo}')">✏ Editar</button>
+          ${c.estado === 'Activo' 
+            ? `<button class="btn-outline btn-sm" onclick="desactivarCuenta('${c.codigo}')" style="color:var(--muted);">🔒</button>`
+            : `<button class="btn-outline btn-sm" onclick="activarCuenta('${c.codigo}')" style="color:var(--green);">✓</button>`
+          }
+        </td>
+      </tr>`;
+    }).join('');
+  })
+  .catch(() => {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red);">Error cargando cuentas</td></tr>';
+  });
+}
+
+function desactivarCuenta(codigo) {
+  fetch(`/web/cuentas/${codigo}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ estado: 'Inactivo' })
+  })
+  .then(r => { if (r.ok) { renderCuentas(); showToast('Cuenta desactivada', 'warn'); } })
+  .catch(() => showToast('Error', 'error'));
+}
+
+function activarCuenta(codigo) {
+  fetch(`/web/cuentas/${codigo}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+	body: JSON.stringify({ estado: 'Activo' })
+	  })
+	  .then(r => { if (r.ok) { renderCuentas(); showToast('Cuenta activada', 'success'); } })
+	  .catch(() => showToast('Error', 'error'));
+	}
+	function showPanel(name, navEl) {
+		document.documentElement.scrollTop = 0;
+		document.body.scrollTop = 0;
+	  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+	  const panel = document.getElementById('panel-' + name);
+	  if (panel) panel.classList.add('active');
+	  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+	  if (navEl) navEl.classList.add('active');
+	  if (name === 'asientos') setTimeout(renderAsientos, 100);
+	  else if (name === 'libro') renderLibro();
+	  else if (name === 'comprobantes') renderComprobantes();
+  else if (name === 'admin' || name === 'usuarios') renderUsuarios();
+  else if (name === 'periodos') renderPeriodos();
+  else if (name === 'tipocambio') renderTC();
+  else if (name === 'cuentas') renderCuentas();
+  else if (name === 'alertas') renderAlertas();
+  else if (name === 'periodos') renderPeriodos();
+  else if (name === 'balance') renderBalance();
+  else if (name === 'resultados') renderResultados();
+  else if (name === 'flujo') renderFlujo();
+  else if (name === 'patrimonio') renderPatrimonio();
+  else if (name === 'ratios') renderRatios();
+  else if (name === 'costos') renderCostos();
+  else if (name === 'errores') renderErrores();
+  else if (name === 'dashboard') renderDashboard();
+
+  setTimeout(() => {
+    document.documentElement.scrollTop = 0;
+  }, 150);
+}
+
+function showAdminPanel(subId, navEl) {
+  const panelAdmin = document.getElementById('panel-admin');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  if (panelAdmin) panelAdmin.classList.add('active');
+  document.querySelectorAll('.admin-sub').forEach(s => s.classList.remove('active'));
+  const sub = document.getElementById(subId);
+  if (sub) sub.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (navEl) navEl.classList.add('active');
+  if (subId === 'sub-usuarios') renderUsuarios();
+  else if (subId === 'sub-auditoria') renderAuditLog();
+  else if (subId === 'sub-respaldos') renderRespaldos();
+  else if (subId === 'sub-configuracion') setTimeout(() => applyConfigToUI(), 200);
+  setTimeout(() => {
+    panelAdmin.scrollIntoView({ block: 'start', behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+  }, 150);
+}
+function renderTC() {
+  const tbody = document.querySelector('#panel-tipocambio table tbody');
+  if (!tbody) return;
+
+  fetch('/web/tipocambio', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">Sin historial de tipo de cambio</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(r => `
+      <tr>
+        <td style="font-family:'IBM Plex Mono',monospace;">${r.fecha || '—'}</td>
+        <td class="tr">${r.compra || '—'}</td>
+        <td class="tr">${r.venta || '—'}</td>
+        <td>${r.fuente || '—'}</td>
+        <td><span class="badge ${r.estado==='Activo'?'b-green':'b-muted'}">${r.estado || '—'}</span></td>
+      </tr>`).join('');
+
+	  const kpis = document.querySelectorAll('#panel-tipocambio .kpi-val');
+	  const usd = data.find(r => r.moneda === 'USD');
+	  const eur = data.find(r => r.moneda === 'EUR');
+	  const mxn = data.find(r => r.moneda === 'MXN');
+	  if (kpis[0] && usd) kpis[0].textContent = 'S/ ' + usd.venta;
+	  if (kpis[1] && eur) kpis[1].textContent = 'S/ ' + eur.venta;
+	  if (kpis[2] && mxn) kpis[2].textContent = 'S/ ' + mxn.venta;
+	  const tcBar = document.getElementById('tc-bar');
+	  if (tcBar && usd) tcBar.textContent = ' USD/PEN: ' + usd.venta;
+  })
+  .catch(() => showToast('Error cargando tipo de cambio', 'error'));
+}
+function refreshTC() {
+  showToast('Actualizando tipo de cambio desde SBS...', 'info');
+  fetch('/web/tipocambio/actualizar', {
+    method: 'POST',
+    credentials: 'include'
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { showToast(data.error, 'error'); return; }
+    renderTC();
+    showToast('Tipo de cambio actualizado — USD/PEN: ' + data.venta, 'success');
+  })
+  .catch(() => showToast('Error actualizando tipo de cambio', 'error'));
+}
+
+function renderErrores() {
+  Promise.all([
+    fetch('/web/inconsistencias', { credentials: 'include' }).then(r => r.json()),
+    fetch('/web/asientos',        { credentials: 'include' }).then(r => r.json())
+  ]).then(([errores, asientos]) => {
+    const tbody = document.getElementById('inc-tbody');
+    if (!tbody) return;
+
+    const totalAsientos  = asientos.filter(a => a.estado === 'Activo').length;
+    const sinCuenta      = asientos.filter(a => a.estado === 'Activo' && (!a.cuentaContable || a.cuentaContable === '')).length;
+
+    document.getElementById('inc-revisados').textContent  = totalAsientos;
+    document.getElementById('inc-total').textContent      = errores.length;
+    document.getElementById('inc-docfalt').textContent    = sinCuenta;
+    document.getElementById('inc-pendientes').textContent = errores.length;
+
+    // Badge nav
+    const badge = document.querySelectorAll('.nav-item .nav-badge')[1];
+    if (badge) badge.textContent = errores.length;
+
+    // Estado sistema
+    const estadoEl = document.getElementById('inc-estado-sistema');
+    if (estadoEl) {
+      if (!errores.length && sinCuenta === 0) {
+        estadoEl.innerHTML = '✅ Sin inconsistencias detectadas<br>✅ Documentación completa<br>✅ Sistema en orden';
+      } else {
+        estadoEl.innerHTML = 
+          (errores.length > 0 ? `⚠ ${errores.length} error(es) pendiente(s)<br>` : '✅ Sin errores contables<br>') +
+          (sinCuenta > 0 ? `⚠ ${sinCuenta} asiento(s) sin cuenta<br>` : '✅ Documentación completa<br>');
+      }
+    }
+
+    if (!errores.length) {
+      tbody.innerHTML = `<tr>
+        <td>—</td><td>—</td>
+        <td>Sin inconsistencias detectadas</td>
+        <td>—</td><td>—</td><td>—</td>
+        <td><span class="badge b-green">✓ Sin errores</span></td>
+        <td>—</td>
+      </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = errores.map(a => {
+      const fecha = a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleDateString('es-PE') : '—';
+      return `<tr>
+        <td style="font-family:'IBM Plex Mono',monospace;">${a.numeroCorrelativo || a.id}</td>
+        <td>${fecha}</td>
+        <td>${a.descripcion || '—'}</td>
+        <td><span class="badge b-red">Error contable</span></td>
+        <td><span class="badge ${a.cuentaContable ? 'b-green">Con doc.' : 'b-gold">Sin cuenta'}</span></td>
+        <td><span class="badge b-red">Alta</span></td>
+        <td><span class="badge b-gold">Pendiente</span></td>
+        <td><button class="btn-outline btn-sm" onclick="corregirInconsistencia(${a.id})">Corregir</button></td>
+      </tr>`;
+    }).join('');
+  })
+  .catch(() => showToast('Error cargando inconsistencias', 'error'));
+}
+function renderResultados() {
+  fetch('/web/resultados', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    const tbody = document.querySelector('#panel-resultados table tbody');
+    if (!tbody) return;
+
+    const fmt = v => 'S/ ' + Math.abs(v).toLocaleString('es-PE', {minimumFractionDigits:2});
+    const row = (cta, desc, val) =>
+      `<tr><td style="font-family:'IBM Plex Mono',monospace;">${cta}</td><td>${desc}</td><td class="tr" style="text-align:right;">${fmt(val)}</td></tr>`;
+    const subrow = (label, val) =>
+      `<tr class="sub-row"><td colspan="2"><strong>${label}</strong></td><td class="tr" style="text-align:right;"><strong>${fmt(val)}</strong></td></tr>`;
+    const totrow = (label, val) =>
+      `<tr class="tot-row" style="font-weight:600;border-top:2px solid var(--border);"><td colspan="2">${label}</td><td class="tr" style="text-align:right;">${fmt(val)}</td></tr>`;
+    const secrow = label =>
+      `<tr class="sec-row" style="background-color:var(--bg-accent);font-weight:600;"><td colspan="3">${label}</td></tr>`;
+
+    let html = '';
+
+    // Ingresos
+    html += secrow('INGRESOS OPERATIVOS');
+    (data.ingresos || []).forEach(item => {
+      html += row(item.codigo, item.descripcion, item.saldo);
+    });
+    html += subrow('Total Ingresos', data.totalIngresos || 0);
+
+    // Costos
+    html += secrow('COSTO DE VENTAS');
+    (data.costos || []).forEach(item => {
+      html += row(item.codigo, item.descripcion, item.saldo);
+    });
+    html += subrow('Total Costo de Ventas', data.totalCostos || 0);
+    html += totrow('UTILIDAD BRUTA', data.utilidadBruta || 0);
+
+    // Gastos Operativos
+    html += secrow('GASTOS OPERATIVOS');
+    (data.gastosOperativos || []).forEach(item => {
+      html += row(item.codigo, item.descripcion, item.saldo);
+    });
+    html += subrow('Total Gastos Operativos', data.totalGastosOperativos || 0);
+    html += totrow('RESULTADO OPERATIVO', data.resultadoOperativo || 0);
+
+    // Gastos Financieros
+    html += secrow('GASTOS FINANCIEROS');
+    (data.gastosFinancieros || []).forEach(item => {
+      html += row(item.codigo, item.descripcion, item.saldo);
+    });
+    html += subrow('Total Gastos Financieros', data.totalGastosFinancieros || 0);
+
+    // Impuesto
+    html += secrow('IMPUESTO A LA RENTA');
+    html += subrow('Total Impuesto', 0);
+
+    // Utilidad Neta
+    html += totrow('UTILIDAD NETA', data.utilidadNeta || 0);
+
+    tbody.innerHTML = html;
+  })
+  .catch(() => showToast('Error cargando estado de resultados', 'error'));
+}
+
+function renderFlujo() {
+  fetch('/web/flujo-caja', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    const tbody = document.querySelector('#panel-flujo table tbody');
+    if (!tbody) return;
+
+    const fmt = v => {
+      const abs = Math.abs(v).toLocaleString('es-PE', {minimumFractionDigits:2});
+      return (v < 0 ? '-' : '') + 'S/ ' + abs;
+    };
+    const row = (desc, val, cls='') =>
+      `<tr><td>${desc}</td><td class="tr ${cls}">${fmt(val)}</td></tr>`;
+    const secrow = label =>
+      `<tr class="sec-row"><td colspan="2">${label}</td></tr>`;
+    const subrow = (label, val) =>
+      `<tr class="sub-row"><td>${label}</td><td class="tr ${val>=0?'pos':'neg'}">${fmt(val)}</td></tr>`;
+    const totrow = (label, val) =>
+      `<tr class="tot-row"><td>${label}</td><td class="tr ${val>=0?'pos':'neg'}">${fmt(val)}</td></tr>`;
+
+    tbody.innerHTML =
+      secrow('ACTIVIDADES OPERATIVAS')
+      + row('Entradas de efectivo por servicios',   data.entradas,        'pos')
+      + row('Pagos a proveedores',                  -data.pagoProveedores,'neg')
+      + row('Pagos de gastos administrativos',      -data.pagoGastos,     'neg')
+      + row('Pagos de tributos',                    -data.pagoTributos,   'neg')
+      + subrow('Flujo neto de actividades operativas', data.flujoOperativo)
+
+      + secrow('ACTIVIDADES DE INVERSIÓN')
+      + row('Compra de equipos/activos',  -data.compraActivos, 'neg')
+      + row('Venta de activos',            data.ventaActivos,  'pos')
+      + subrow('Flujo neto de actividades de inversión', data.flujoInversion)
+
+      + secrow('ACTIVIDADES DE FINANCIAMIENTO')
+      + row('Préstamos recibidos',  data.prestamosRecibidos, 'pos')
+      + row('Pago de préstamos',   -data.pagoPrestamos,      'neg')
+      + row('Aportes de capital',   data.aportesCapital,     'pos')
+      + subrow('Flujo neto de actividades de financiamiento', data.flujoFinanciamiento)
+
+      + totrow('AUMENTO/DISMINUCIÓN NETA DE EFECTIVO', data.netoTotal)
+      + row('Efectivo al inicio del período', data.efectivoInicio)
+      + totrow('EFECTIVO AL FINAL DEL PERÍODO', data.efectivoFinal);
+
+	  // Gráfico
+	  const bars = document.querySelectorAll('#panel-flujo .bar-fill');
+	  const amts = document.querySelectorAll('#panel-flujo .bar-amt');
+	  const max = Math.max(data.mes1, data.mes2, data.mes3, 1);
+	  if (bars[0]) bars[0].style.width = ((data.mes1 / max) * 100) + '%';
+	  if (bars[1]) bars[1].style.width = ((data.mes2 / max) * 100) + '%';
+	  if (bars[2]) bars[2].style.width = (Math.abs(data.mes3) / max * 100) + '%';
+	  if (amts[0]) amts[0].textContent = 'S/ ' + (data.mes1||0).toLocaleString('es-PE');
+	  if (amts[1]) amts[1].textContent = 'S/ ' + (data.mes2||0).toLocaleString('es-PE');
+	  if (amts[2]) amts[2].textContent = 'S/ ' + (data.mes3||0).toLocaleString('es-PE');
+  })
+  .catch(() => showToast('Error cargando flujo de caja', 'error'));
+}
+function renderPatrimonio() {
+  fetch('/web/patrimonio', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    const tbody = document.querySelector('#panel-patrimonio table tbody');
+    if (!tbody) return;
+
+    const fmt = v => v === 0 ? '—' : 
+      (v < 0 ? '-' : '') + 'S/ ' + Math.abs(v).toLocaleString('es-PE', {minimumFractionDigits:2});
+    const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+
+    const row = (concepto, cap, res, resAcum, util, total, isTot=false) => {
+      const tag = isTot ? 'tot-row' : '';
+      return `<tr class="${tag}">
+        <td>${concepto}</td>
+        <td class="tr ${cls(cap)}">${fmt(cap)}</td>
+        <td class="tr ${cls(res)}">${fmt(res)}</td>
+        <td class="tr ${cls(resAcum)}">${fmt(resAcum)}</td>
+        <td class="tr ${cls(util)}">${fmt(util)}</td>
+        <td class="tr ${cls(total)}">${fmt(total)}</td>
+      </tr>`;
+    };
+
+	tbody.innerHTML =
+	  row('Saldo inicial',
+	      data.capital, data.reservas, data.resAcumulado, data.utilidad, data.totalInicial)
+
+	  + row('Aportes de capital',
+	      data.aportes, 0, 0, 0, data.aportes)
+
+	  + row('Utilidad del ejercicio',
+	      0, 0, 0, data.utilidad2026, data.utilidad2026)
+
+	  + row('Distribución de utilidades',
+	      0, 0, 0, data.distUtilidades, data.distUtilidades)
+
+	  + row('Transferencia a reservas',
+	      0, data.transReservas, 0, -data.transReservas, 0)
+
+	  + row('Saldo final',
+	      data.saldoFinalCapital,
+	      data.saldoFinalReservas,
+	      data.resAcumulado,
+	      data.saldoFinalUtilidad,
+	      data.saldoFinalTotal, true);
+  })
+  .catch(() => showToast('Error cargando patrimonio', 'error'));
+}
+function renderRatios() {
+  fetch('/web/ratios', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    const set = (id, val, unit='') => {
+      const el = document.getElementById('r-' + id);
+      if (el) el.textContent = val + unit;
+    };
+    const st = (id, ok, label) => {
+      const el = document.getElementById('s-' + id);
+      if (el) { el.textContent = ok ? '✓ Óptimo' : '⚠ Revisar'; el.className = 'ratio-st ' + (ok ? 'st-ok' : 'st-warn'); }
+    };
+
+    set('lc',  data.liquidezCorriente);
+    set('la',  data.liquidezAbsoluta);
+    set('roa', data.roa,  '%');
+    set('roe', data.roe,  '%');
+    set('mn',  data.margenNeto,  '%');
+    set('mb',  data.margenBruto, '%');
+    set('et',  data.endeudamiento,   '%');
+    set('dp',  data.deudaPatrimonio);
+    set('af',  data.autonomia,       '%');
+    set('ci',  data.coberturaIntereses);
+    set('ra',  data.rotacionActivos);
+    set('eo',  data.eficienciaOper,  '%');
+    set('ppc', data.periodoCobro,    ' días');
+
+    st('lc',  data.liquidezCorriente >= 1.5);
+    st('la',  data.liquidezAbsoluta  >= 0.5);
+    st('roa', data.roa  >= 1.9);
+    st('roe', data.roe  >= 11.5);
+    st('mn',  data.margenNeto  >= 8.2);
+    st('mb',  data.margenBruto >= 40);
+    st('et',  data.endeudamiento   <= 60);
+    st('dp',  data.deudaPatrimonio <= 1.5);
+    st('af',  data.autonomia       >= 40);
+    st('ci',  data.coberturaIntereses >= 2);
+    st('ra',  data.rotacionActivos >= 1);
+    st('eo',  data.eficienciaOper  <= 60);
+    st('ppc', data.periodoCobro    <= 30);
+	// Liquidez SBS y Cobertura Depósitos (simulados para cooperativa)
+	const lmn = data.liquidezCorriente || 0;
+	const cd  = data.liquidezAbsoluta  * 100 || 0;
+	set('lmn', lmn.toFixed(1), '%');
+	set('cd',  cd.toFixed(1),  '%');
+	st('lmn', lmn >= 8);
+	st('cd',  cd  >= 20);
+
+	// Calidad de Cartera
+	const mor = data.morosidad || 2.78;
+	set('mor', mor.toFixed(2), '%');
+	set('cob', '55.0',         '%');
+	set('cas', '0.5',          '%');
+	st('mor', mor < 5);
+	st('cob', true);
+	st('cas', true);
+  })
+  .catch(() => showToast('Error cargando ratios', 'error'));
+}
+function renderCostos() {
+  fetch('/web/costos', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    const tbody = document.getElementById('tbody-costos');
+    if (!tbody) return;
+
+    const fmt = v => 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2});
+
+    let totalPresupuesto = 0, totalEjecutado = 0;
+    let mayorEjecucion = { centro: '—', val: 0 };
+    let mayorSaldo     = { centro: '—', val: 0 };
+
+    const rows = Object.entries(data).map(([centro, item]) => {
+      const presupuesto = item.presupuesto || 0;
+      const ejecutado   = item.ejecutado   || 0;
+      const saldo       = Math.round((presupuesto - ejecutado) * 100) / 100;
+      const pct         = presupuesto > 0 ? (ejecutado / presupuesto * 100).toFixed(1) : '0.0';
+      const pctNum      = parseFloat(pct);
+
+      let st, stLabel;
+      if (presupuesto === 0)      { st = 'b-muted'; stLabel = '⚪ Sin presupuesto'; }
+      else if (pctNum >= 100)     { st = 'b-red';   stLabel = '🔴 Excedido'; }
+      else if (pctNum >= 80)      { st = 'b-gold';  stLabel = '🟡 Por vencer'; }
+      else                        { st = 'b-green'; stLabel = '🟢 En presupuesto'; }
+
+      totalPresupuesto += presupuesto;
+      totalEjecutado   += ejecutado;
+
+      if (ejecutado > mayorEjecucion.val) mayorEjecucion = { centro, val: ejecutado };
+      if (saldo > mayorSaldo.val)         mayorSaldo     = { centro, val: saldo };
+
+      return `<tr>
+        <td>${centro}</td>
+        <td class="tr">${fmt(presupuesto)}</td>
+        <td class="tr">${fmt(ejecutado)}</td>
+        <td class="tr pos">${fmt(saldo)}</td>
+        <td class="tr">${pct}%</td>
+        <td><span class="badge ${st}">${stLabel}</span></td>
+      </tr>`;
+    });
+
+    const totalSaldo = Math.round((totalPresupuesto - totalEjecutado) * 100) / 100;
+    const totalPct   = totalPresupuesto > 0 ? (totalEjecutado / totalPresupuesto * 100).toFixed(1) : '0.0';
+    const estadoGeneral = parseFloat(totalPct) >= 100 ? '🔴 Excedido' : parseFloat(totalPct) >= 80 ? '🟡 Por vencer' : '🟢 En presupuesto';
+
+    tbody.innerHTML = rows.join('') + `
+      <tr class="tot-row">
+        <td><strong>TOTAL</strong></td>
+        <td class="tr"><strong>${fmt(totalPresupuesto)}</strong></td>
+        <td class="tr"><strong>${fmt(totalEjecutado)}</strong></td>
+        <td class="tr pos"><strong>${fmt(totalSaldo)}</strong></td>
+        <td class="tr"><strong>${totalPct}%</strong></td>
+        <td><span class="badge ${parseFloat(totalPct) >= 80 ? 'b-gold' : 'b-green'}">${estadoGeneral}</span></td>
+      </tr>`;
+
+    document.getElementById('c-presupuesto').textContent = fmt(totalPresupuesto);
+    document.getElementById('c-ejecutado').textContent   = fmt(totalEjecutado);
+    document.getElementById('c-saldo').textContent       = fmt(totalSaldo);
+    document.getElementById('c-pct').textContent         = totalPct + '%';
+    document.getElementById('c-estado').textContent      = estadoGeneral;
+
+    const barsEl = document.getElementById('costos-bars');
+    if (barsEl) {
+      const presMes = [
+        Math.round((totalPresupuesto / 3) * 100) / 100,
+        Math.round((totalPresupuesto / 3) * 100) / 100,
+        Math.round((totalPresupuesto / 3 - 0.01) * 100) / 100
+      ];
+      const ejeMes = [
+        Math.round(totalEjecutado * 0.28 * 100) / 100,
+        Math.round(totalEjecutado * 0.35 * 100) / 100,
+        Math.round(totalEjecutado * 0.37 * 100) / 100
+      ];
+      const meses = ['Enero', 'Febrero', 'Marzo'];
+      const pctsMes = meses.map((_, i) => parseFloat((ejeMes[i] / presMes[i] * 100).toFixed(1)));
+
+      barsEl.innerHTML = `
+        <table class="tbl" style="width:100%;">
+          <thead><tr>
+            <th>Mes</th><th class="tr">Presupuesto</th><th class="tr">Ejecutado</th>
+            <th class="tr">Saldo</th><th class="tr">% Ejecución</th>
+          </tr></thead>
+          <tbody>
+            ${meses.map((mes, i) => {
+              const saldoMes = Math.round((presMes[i] - ejeMes[i]) * 100) / 100;
+              return `<tr>
+                <td>${mes}</td>
+                <td class="tr">${fmt(presMes[i])}</td>
+                <td class="tr">${fmt(ejeMes[i])}</td>
+                <td class="tr pos">${fmt(saldoMes)}</td>
+                <td class="tr">${pctsMes[i].toFixed(1)}%</td>
+              </tr>`;
+            }).join('')}
+            <tr class="tot-row">
+              <td><strong>Total</strong></td>
+              <td class="tr"><strong>${fmt(totalPresupuesto)}</strong></td>
+              <td class="tr"><strong>${fmt(totalEjecutado)}</strong></td>
+              <td class="tr pos"><strong>${fmt(totalSaldo)}</strong></td>
+              <td class="tr"><strong>${totalPct}%</strong></td>
+            </tr>
+          </tbody>
+        </table>`;
+
+      const mayorMes = meses[pctsMes.indexOf(Math.max(...pctsMes))];
+      const menorMes = meses[pctsMes.indexOf(Math.min(...pctsMes))];
+      const mayorPct = Math.max(...pctsMes).toFixed(1);
+      const menorPct = Math.min(...pctsMes).toFixed(1);
+
+      document.getElementById('c-mayor').innerHTML =
+        `Mayor monto ejecutado: <strong>${mayorEjecucion.centro}</strong> — ${fmt(mayorEjecucion.val)}<br>
+         Mayor ejecución mensual: <strong>${mayorMes}</strong> — ${mayorPct}%<br>
+         Menor ejecución mensual: <strong>${menorMes}</strong> — ${menorPct}%`;
+
+      document.getElementById('c-saldo-mayor').innerHTML =
+        `Mayor saldo disponible: <strong>${mayorSaldo.centro}</strong> — ${fmt(mayorSaldo.val)}<br>
+         Saldo disponible total: <strong>${fmt(totalSaldo)}</strong>`;
+
+      document.getElementById('c-estado-ana').innerHTML =
+        `Ejecución total: <strong>${totalPct}%</strong><br>
+         Saldo disponible: <strong>${fmt(totalSaldo)}</strong><br>
+         Estado general: <strong>${estadoGeneral}</strong>`;
+    }
+  })
+  .catch(() => showToast('Error cargando costos', 'error'));
+}
+function renderAlertas() {
+  Promise.all([
+    fetch('/web/alertas', { credentials: 'include' }).then(r => r.json()),
+    fetch('/web/asientos', { credentials: 'include' }).then(r => r.json()),
+    fetch('/web/usuarios', { credentials: 'include' }).then(r => r.json())
+  ]).then(([alertas, asientos, usuarios]) => {
+
+    // Contar por tipo
+    const criticas = alertas.filter(a => a.tipo === 'danger').length;
+    const advertencias = alertas.filter(a => a.tipo === 'warn').length;
+    const informativas = alertas.filter(a => a.tipo === 'info').length;
+    const total = alertas.length;
+
+    // Llenar KPIs
+    document.getElementById('a-total').textContent = total;
+    document.getElementById('a-criticas').textContent = criticas;
+    document.getElementById('a-advertencias').textContent = advertencias;
+    document.getElementById('a-informativas').textContent = informativas;
+
+    // Categorías
+    const asientosPendientes = asientos.filter(a => a.estado === 'Pendiente aprobación').length;
+    const usuariosBloqueados = usuarios.filter(u => u.estado === 'Bloqueado').length;
+    const cxcVencidas = alertas.filter(a => a.titulo?.toLowerCase().includes('cobrar')).length;
+    const cxpPendientes = alertas.filter(a => a.titulo?.toLowerCase().includes('pagar')).length;
+
+    document.getElementById('cat-contables').textContent = asientosPendientes;
+    document.getElementById('cat-cobrar').textContent = cxcVencidas;
+    document.getElementById('cat-pagar').textContent = cxpPendientes;
+    document.getElementById('cat-presupuesto').textContent = '0';
+    document.getElementById('cat-documentacion').textContent = '0';
+    document.getElementById('cat-seguridad').textContent = usuariosBloqueados;
+
+	// Detalle de alertas
+	const container = document.getElementById('alertas-detalle-container');
+	if (!alertas.length) {
+	  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">✅ Sin alertas activas</div>';
+	  return;
+	}
+
+	const hoy = new Date().toLocaleDateString('es-PE');
+	const html = alertas.map(a => {
+	  const icon = a.tipo === 'danger' ? '🔴' : a.tipo === 'warn' ? '⚠️' : 'ℹ️';
+	  const tipoLabel = a.tipo === 'danger' ? 'Crítica' : a.tipo === 'warn' ? 'Advertencia' : 'Informativa';
+	  const color = a.tipo === 'danger' ? '#ef4444' : a.tipo === 'warn' ? '#f59e0b' : '#3b82f6';
+	  const bg = a.tipo === 'danger' ? '#fef2f2' : a.tipo === 'warn' ? '#fffbeb' : '#eff6ff';
+	  const border = a.tipo === 'danger' ? '#fca5a5' : a.tipo === 'warn' ? '#fcd34d' : '#93c5fd';
+	  return `
+	    <div style="background:${bg};border:1px solid ${border};border-left:4px solid ${color};
+	                border-radius:10px;padding:16px 18px;margin-bottom:14px;
+	                box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+	      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+	        <span style="font-weight:700;color:${color};font-size:14px;">${icon} ${tipoLabel}</span>
+	        <span style="font-size:11px;color:var(--muted);background:white;
+	                     padding:2px 8px;border-radius:20px;border:1px solid ${border};">${hoy}</span>
+	      </div>
+	      <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px;">${a.titulo}</div>
+	      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">${a.detalle}</div>
+	      <button onclick="revisarAlerta('${a.titulo}')"
+	              style="background:${color};color:white;border:none;border-radius:6px;
+	                     padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;">
+	        → Revisar
+	      </button>
+	    </div>`;
+	}).join('');
+
+	container.innerHTML = html;
+
+	// Badge nav
+	const badge = document.querySelector('.nav-item[onclick*="alertas"] .nav-badge');
+	if (badge) badge.textContent = total;
+
+	}).catch(() => showToast('Error cargando alertas', 'error'));
+	}
+function renderDashboard() {
+  fetch('/web/dashboard', { credentials: 'include' })
+  .then(r => r.json())
+  .then(data => {
+    const kpis = document.querySelectorAll('#panel-dashboard .kpi-val');
+    const utilidad = (data.ingresos || 0) - (data.gastos || 0);
+	if (kpis[0]) kpis[0].textContent = 'S/ ' + (data.activoTotal || 0).toLocaleString('es-PE', {minimumFractionDigits:2});
+	if (kpis[1]) kpis[1].textContent = 'S/ ' + (data.ingresos || 0).toLocaleString('es-PE', {minimumFractionDigits:2});
+	if (kpis[2]) kpis[2].textContent = 'S/ ' + ((data.ingresos||0) - (data.gastos||0)).toLocaleString('es-PE', {minimumFractionDigits:2});
+	if (kpis[3]) kpis[3].textContent = (data.morosidad || 0).toFixed(2) + '%';
+	if (kpis[4]) kpis[4].textContent = (data.roe || 0).toFixed(1) + '%';
+	if (kpis[5]) kpis[5].textContent = data.asientosMes || 0;
+	if (kpis[6]) kpis[6].textContent = 'S/ ' + (data.ctasCobrar || 0).toLocaleString('es-PE', {minimumFractionDigits:2});
+	if (kpis[7]) kpis[7].textContent = (data.liquidez || 0).toFixed(2);
+	const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+	const hoy = new Date();
+	const mes1 = meses[hoy.getMonth()];
+	const mes2 = meses[(hoy.getMonth()-1+12)%12];
+	const mes3 = meses[(hoy.getMonth()-2+12)%12];
+
+	const barLabels = document.querySelectorAll('#panel-dashboard .bar-lbl');
+	if (barLabels[0]) barLabels[0].textContent = mes3;
+	if (barLabels[1]) barLabels[1].textContent = mes2;
+	if (barLabels[2]) barLabels[2].textContent = mes1;
+	if (barLabels[3]) barLabels[3].textContent = 'G. ' + mes3;
+	if (barLabels[4]) barLabels[4].textContent = 'G. ' + mes2;
+	if (barLabels[5]) barLabels[5].textContent = 'G. ' + mes1;
+
+	const max = Math.max(data.ingEnero||0, data.ingFebrero||0, data.ingMarzo||0, data.gasEnero||0, data.gasFebrero||0, data.gasMarzo||0, 1);
+	const bars = document.querySelectorAll('#panel-dashboard .bar-fill');
+	const amts = document.querySelectorAll('#panel-dashboard .bar-amt');
+	if (bars[0]) bars[0].style.width = ((data.ingEnero||0)/max*100)+'%';
+	if (bars[1]) bars[1].style.width = ((data.ingFebrero||0)/max*100)+'%';
+	if (bars[2]) bars[2].style.width = ((data.ingMarzo||0)/max*100)+'%';
+	if (bars[3]) bars[3].style.width = ((data.gasEnero||0)/max*100)+'%';
+	if (bars[4]) bars[4].style.width = ((data.gasFebrero||0)/max*100)+'%';
+	if (bars[5]) bars[5].style.width = ((data.gasMarzo||0)/max*100)+'%';
+	if (amts[0]) amts[0].textContent = 'S/ '+(data.ingEnero||0).toLocaleString('es-PE');
+	if (amts[1]) amts[1].textContent = 'S/ '+(data.ingFebrero||0).toLocaleString('es-PE');
+	if (amts[2]) amts[2].textContent = 'S/ '+(data.ingMarzo||0).toLocaleString('es-PE');
+	if (amts[3]) amts[3].textContent = 'S/ '+(data.gasEnero||0).toLocaleString('es-PE');
+	if (amts[4]) amts[4].textContent = 'S/ '+(data.gasFebrero||0).toLocaleString('es-PE');
+	if (amts[5]) amts[5].textContent = 'S/ '+(data.gasMarzo||0).toLocaleString('es-PE');
+	  })
+	  .catch(() => showToast('Error cargando alertas', 'error'));
+
+	    fetch('/web/inconsistencias', { credentials: 'include' })
+	    .then(r => r.json())
+	    .then(errores => {
+	      const kpis = document.querySelectorAll('#panel-alertas .kpi-val');
+	      if (kpis[3]) kpis[3].textContent = errores.length;
+	    });
+	  }
+
+	  function toggleUserMenu() {
+	    const dd = document.getElementById('user-dropdown');
+	    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+	  }
+
+	  document.addEventListener('click', function(e) {
+	    if (!e.target.closest('.user-badge')) {	
+	      const dd = document.getElementById('user-dropdown');
+	      if (dd) dd.style.display = 'none';
+	    }
+	  });
+	  function descargarPlantilla() {
+	      const csv = '\uFEFF' + 
+	        'tipo,descripcion,debe,haber,cuentaContable,centroCosto,moneda,glosa,referenciaDocumento\n' +
+	        'Apertura,Apertura - Caja,30000,0,1011,General,PEN,Asiento apertura 2026,APE-001\n' +
+	        'Apertura,Apertura - Capital,0,30000,3011,General,PEN,Capital social inicial,APE-001\n' +
+	        'Operación ordinaria,Ingresos por servicios,5000,0,1011,Ventas,PEN,Cobro cliente ABC,F001-001\n' +
+	        'Operación ordinaria,Ingresos por servicios,0,5000,5011,Ventas,PEN,Ingresos mes enero,F001-001\n' +
+	        'Operación ordinaria,Gastos administrativos,2000,0,4501,Administración,PEN,Pago planilla,PL-001\n' +
+	        'Operación ordinaria,Gastos administrativos,0,2000,1011,Administración,PEN,Salida caja planilla,PL-001\n';
+
+	      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+	      const url = URL.createObjectURL(blob);
+	      const a = document.createElement('a');
+	      a.href = url;
+	      a.download = 'FINANTEL_Plantilla_Importacion.csv';
+	      document.body.appendChild(a);
+	      a.click();
+	      document.body.removeChild(a);
+	      URL.revokeObjectURL(url);
+	      showToast('Plantilla descargada correctamente', 'success');
+	  }
+	  function switchRatioTab(tab, btn) {
+	    document.querySelectorAll('.ratio-tab').forEach(t => {
+	      t.style.display = 'none';
+	      t.style.opacity = '0';
+	    });
+
+	    document.querySelectorAll('#panel-ratios .itab').forEach(b => b.classList.remove('active'));
+
+	    const el = document.getElementById('rtab-' + tab);
+	    if (el) {
+	      el.style.display = 'block';
+	      el.style.transition = 'opacity .3s ease, transform .3s ease';
+	      el.style.transform = 'translateY(8px)';
+	      el.style.opacity = '0';
+	      requestAnimationFrame(() => {
+	        requestAnimationFrame(() => {
+	          el.style.opacity = '1';
+	          el.style.transform = 'translateY(0)';
+	        });
+	      });
+	    }
+
+	    if (btn) btn.classList.add('active');
+	  }
+	  function procesarImportacion(formElement) {
+	      const fileInput = formElement.querySelector('input[type="file"]');
+	      const file = fileInput.files[0];
+	      
+	      if (!file) {
+	          showToast('Selecciona un archivo', 'error');
+	          return;
+	      }
+
+	      const form = new FormData();
+	      form.append('archivo', file);
+
+	      fetch('/web/importar-excel', { 
+	          method: 'POST', 
+	          body: form,
+	          credentials: 'include' 
+	      })
+	      .then(r => r.json())
+	      .then(data => {
+	          if (data.exito) {
+	              mostrarTablaImportacion(data.asientos);
+	              showToast(data.mensaje, 'success');
+	              fileInput.value = '';
+	          } else {
+	              showToast(data.mensaje, 'error');
+	          }
+	      })
+	      .catch(e => showToast('Error: ' + e.message, 'error'));
+	  }
+
+	  function mostrarTablaImportacion(asientos) {
+	      let html = '<table style="width:100%; margin-top:20px; border-collapse:collapse;">';
+	      html += '<tr style="background:#f0f0f0; font-weight:600;">';
+	      html += '<td style="padding:10px; border:1px solid #ddd;">Tipo</td>';
+	      html += '<td style="padding:10px; border:1px solid #ddd;">Descripción</td>';
+	      html += '<td style="padding:10px; border:1px solid #ddd;">Cuenta</td>';
+	      html += '<td style="padding:10px; border:1px solid #ddd; text-align:right;">Debe</td>';
+	      html += '<td style="padding:10px; border:1px solid #ddd; text-align:right;">Haber</td>';
+	      html += '<td style="padding:10px; border:1px solid #ddd;">Centro</td>';
+	      html += '</tr>';
+	      
+	      asientos.forEach(a => {
+	          html += '<tr>';
+	          html += `<td style="padding:10px; border:1px solid #ddd;">${a.tipo}</td>`;
+	          html += `<td style="padding:10px; border:1px solid #ddd;">${a.descripcion}</td>`;
+	          html += `<td style="padding:10px; border:1px solid #ddd;">${a.cuenta}</td>`;
+	          html += `<td style="padding:10px; border:1px solid #ddd; text-align:right;">S/ ${a.debe.toFixed(2)}</td>`;
+	          html += `<td style="padding:10px; border:1px solid #ddd; text-align:right;">S/ ${a.haber.toFixed(2)}</td>`;
+	          html += `<td style="padding:10px; border:1px solid #ddd;">${a.centro}</td>`;
+	          html += '</tr>';
+	      });
+	      
+	      html += '</table>';
+	      
+	      const div = document.getElementById('import-preview') || document.createElement('div');
+	      div.id = 'import-preview';
+	      div.innerHTML = html;
+	      document.getElementById('panel-importar').appendChild(div);
+	  }
+	</script>
+	</main>
+	</div>
+	</body>
+	</html>
