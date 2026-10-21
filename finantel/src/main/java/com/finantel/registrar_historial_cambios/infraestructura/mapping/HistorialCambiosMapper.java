@@ -11,6 +11,7 @@ public class HistorialCambiosMapper {
         HistorialCambio h = new HistorialCambio();
         h.setUsuario(usuario);
         h.setCampo(campo);
+        h.setObjeto("Historial de cambios");
         h.setValorAnterior(anterior);
         h.setValorNuevo(nuevo);
         h.setFecha(LocalDateTime.now());

@@ -103,9 +103,8 @@ public class AsientoContableController {
             return ResponseEntity.badRequest().body(java.util.Map.of("error",
                 "Los campos 'debe' y 'haber' deben ser números. Ejemplo: 5000 o 5000.50"));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            e.printStackTrace();
             return ResponseEntity.badRequest().body(java.util.Map.of("error",
-                "Cuenta contable inválida: " + a.getCuentaContable()));
+                "No se pudo guardar el asiento: " + e.getMostSpecificCause().getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
         }

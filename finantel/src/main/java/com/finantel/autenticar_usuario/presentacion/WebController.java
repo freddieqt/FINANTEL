@@ -11,6 +11,7 @@ import java.util.HashMap;
 import com.finantel.generar_estados_financieros.aplicacion.GenerarEstadosFinancierosService;
 import com.finantel.tipo_cambio.dominio.entity.TipoCambio;
 import com.finantel.tipo_cambio.dominio.repository.TipoCambioRepository;
+import com.finantel.tipo_cambio.aplicacion.TipoCambioSbsService;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.http.ResponseEntity;
 import java.security.Principal;
@@ -40,6 +41,7 @@ public class WebController {
 	private final ValidarCuentasService cuentaService;
 	private final PeriodoContableService periodoService;
 	private final TipoCambioRepository tipoCambioRepo;
+	private final TipoCambioSbsService tipoCambioService;
 	private final JdbcTemplate jdbcTemplate;
 	private final GenerarEstadosFinancierosService estadosService;
 
@@ -47,7 +49,8 @@ public class WebController {
 			UsuarioService usuarioService, EmitirComprobantesService comprobanteService,
 			ValidarCuentasService cuentaService, PeriodoContableService periodoService,
 			TipoCambioRepository tipoCambioRepo, JdbcTemplate jdbcTemplate,
-			GenerarEstadosFinancierosService estadosService) {
+			GenerarEstadosFinancierosService estadosService,
+			TipoCambioSbsService tipoCambioService) {
 		this.asientoService = asientoService;
 		this.auditoriaService = auditoriaService;
 		this.usuarioService = usuarioService;
@@ -55,6 +58,7 @@ public class WebController {
 		this.cuentaService = cuentaService;
 		this.periodoService = periodoService;
 		this.tipoCambioRepo = tipoCambioRepo;
+		this.tipoCambioService = tipoCambioService;
 		this.jdbcTemplate = jdbcTemplate;
 		this.estadosService = estadosService;
 	}
@@ -644,21 +648,7 @@ public class WebController {
 	@ResponseBody
 	public ResponseEntity<?> actualizarTipoCambio() {
 		try {
-			org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
-			@SuppressWarnings("unchecked")
-			java.util.Map<String, Object> response = rt.getForObject(
-				"https://api.apis.net.pe/v1/tipo-cambio-sunat", java.util.Map.class);
-			
-			if (response == null) {
-				throw new IllegalStateException("La API no devolvió datos de tipo de cambio");
-			}
-			Double compra = Double.parseDouble(response.get("compra").toString());
-			Double venta = Double.parseDouble(response.get("venta").toString());
-			
-			String sql = "INSERT INTO TipoCambio (fecha, compra, venta, fuente, estado) VALUES (GETDATE(), ?, ?, 'SBS', 'Activo')";
-			jdbcTemplate.update(sql, compra, venta);
-			
-			return ResponseEntity.ok(Map.of("compra", compra, "venta", venta));
+			return ResponseEntity.ok(tipoCambioService.actualizar());
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().body(Map.of("error", "No se pudo obtener el tipo de cambio"));
 		}

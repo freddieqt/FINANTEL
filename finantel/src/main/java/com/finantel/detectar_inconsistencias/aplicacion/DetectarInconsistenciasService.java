@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.jspecify.annotations.NonNull;
 import java.util.ArrayList;
 import java.util.List;
+import java.math.BigDecimal;
 
 @Service
 public class DetectarInconsistenciasService {
@@ -20,7 +21,7 @@ public class DetectarInconsistenciasService {
     public String detectarErrores(@NonNull Integer id) {
         AsientoContable a = repo.findById(id)
             .orElseThrow(() -> new RuntimeException("Asiento no encontrado"));
-        if (Math.abs(a.getDebe() - a.getHaber()) > 0.01) {
+        if (estaDescuadrado(a)) {
             return "Error: El asiento no está balanceado. Debe: " + a.getDebe() + " Haber: " + a.getHaber();
         }
         return "Sin inconsistencias detectadas";
@@ -30,7 +31,7 @@ public class DetectarInconsistenciasService {
         List<AsientoContable> asientos = repo.findAll();
         List<Inconsistencia> errores = new ArrayList<>();
         for (AsientoContable a : asientos) {
-            if (Math.abs(a.getDebe() - a.getHaber()) > 0.01) {
+            if (estaDescuadrado(a)) {
                 errores.add(new Inconsistencia(
                     a.getId(),
                     "Desbalance contable",
@@ -39,5 +40,12 @@ public class DetectarInconsistenciasService {
             }
         }
         return errores;
+    }
+
+    private boolean estaDescuadrado(AsientoContable asiento) {
+        return BigDecimal.valueOf(asiento.getDebe())
+            .subtract(BigDecimal.valueOf(asiento.getHaber()))
+            .abs()
+            .compareTo(new BigDecimal("0.01")) > 0;
     }
 }

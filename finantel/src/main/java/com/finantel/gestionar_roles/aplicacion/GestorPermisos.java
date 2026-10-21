@@ -6,6 +6,9 @@ import org.springframework.stereotype.Component;
 public class GestorPermisos {
 
     public boolean tienePermiso(String rol, String accion) {
+        if (rol == null || accion == null) {
+            return false;
+        }
         switch (rol) {
             case "Administrador":
                 return true;

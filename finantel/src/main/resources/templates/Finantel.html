@@ -158,32 +158,37 @@ function confirmarAnular(id) {
 async function cargarPeriodos() {
   const sel = document.getElementById('periodoId');
   if (!sel) return;
-  const res = await fetch('/web/periodos', { credentials: 'include' });
-  const periodos = await res.json();
-  sel.innerHTML = '<option value="">-- Selecciona periodo --</option>';
-  periodos
-    .filter(p => p.estado === 'Activo')
-    .forEach(p => sel.add(new Option(p.periodo, p.id)));
+  try {
+    const res = await fetch('/web/periodos/lista', { credentials: 'include' });
+    const periodos = await res.json();
+    sel.innerHTML = '<option value="">-- Selecciona periodo --</option>';
+    periodos
+      .filter(p => p.estado === 'Activo' || p.estado === 'Abierto')
+      .forEach(p => sel.add(new Option(p.periodo, p.id)));
+  } catch (e) {
+    console.error('Error cargando periodos:', e);
+  }
 }
-
 function openNuevoAsiento() {
-  const corrEl = document.getElementById('asiento-correlativo');
-  const fechaEl = document.getElementById('asiento-fecha');
-  if (corrEl) corrEl.value = getCurrentCorrelativo();
-  if (fechaEl) fechaEl.value = new Date().toLocaleString('es-PE');
-  
-  // Limpiar form
-  const tipoEl = document.getElementById('asiento-tipo');
-  if (tipoEl) tipoEl.value = '';
-  const descEl = document.getElementById('asiento-desc');
-  if (descEl) descEl.value = '';
-  document.getElementById('sugerencia-cuentas').style.display = 'none';
-  
-  const ocrR = document.getElementById('ocr-result');
-  if (ocrR) { ocrR.style.display='none'; ocrR.innerHTML=''; }
-  
-  document.querySelectorAll('#asiento-lineas input[type=number]').forEach(i => i.value='');
-  recalcTotals();
+	cargarPeriodos();
+	
+	const corrEl = document.getElementById('asiento-correlativo');
+	const fechaEl = document.getElementById('asiento-fecha');
+	if (corrEl) corrEl.value = getCurrentCorrelativo();
+	if (fechaEl) fechaEl.value = new Date().toLocaleString('es-PE');
+	
+	const tipoEl = document.getElementById('asiento-tipo');
+	if (tipoEl) tipoEl.value = '';
+	const descEl = document.getElementById('asiento-desc');
+	if (descEl) descEl.value = '';
+	const sugEl = document.getElementById('sugerencia-cuentas');
+	if (sugEl) sugEl.style.display = 'none';
+	
+	const ocrR = document.getElementById('ocr-result');
+	if (ocrR) { ocrR.style.display = 'none'; ocrR.innerHTML = ''; }
+	
+	document.querySelectorAll('#asiento-lineas input[type=number]').forEach(i => i.value = '');
+	recalcTotals();
 
   // Cargar periodos activos desde BD
   cargarPeriodos();

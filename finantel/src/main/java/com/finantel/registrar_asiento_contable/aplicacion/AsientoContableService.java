@@ -1,6 +1,7 @@
 package com.finantel.registrar_asiento_contable.aplicacion;
 
 import com.finantel.registrar_accion.aplicacion.AuditoriaService;
+import java.math.BigDecimal;
 import com.finantel.registrar_asiento_contable.dominio.entity.AsientoContable;
 import com.finantel.registrar_asiento_contable.dominio.repository.AsientoContableRepository;
 import com.finantel.validar_cuentas.dominio.repository.ValidarCuentasRepository;
@@ -49,8 +50,10 @@ public class AsientoContableService {
             errores.add("El campo 'debe' debe ser mayor a 0");
         if (a.getHaber() == null || a.getHaber() <= 0)
             errores.add("El campo 'haber' debe ser mayor a 0");
-        if (a.getDebe() != null && a.getHaber() != null && Math.abs(a.getDebe() - a.getHaber()) > 0.01)
-            errores.add("El asiento no cuadra. Debe: " + a.getDebe() + " ≠ Haber: " + a.getHaber());
+        if (a.getDebe() != null && a.getHaber() != null &&
+        	    BigDecimal.valueOf(a.getDebe()).subtract(BigDecimal.valueOf(a.getHaber())).abs()
+        	        .compareTo(new BigDecimal("0.01")) > 0)
+        	    errores.add("El asiento no cuadra. Debe: " + a.getDebe() + " ≠ Haber: " + a.getHaber());
         if (!errores.isEmpty())
             throw new RuntimeException(String.join(" | ", errores));
 
@@ -84,6 +87,7 @@ public class AsientoContableService {
         copia.setCentroCosto(original.getCentroCosto());
         copia.setMoneda(original.getMoneda());
         copia.setTipoCambio(original.getTipoCambio());
+        copia.setPeriodoId(original.getPeriodoId());
 
         int anio = (copia.getFechaContable() != null) ? copia.getFechaContable().getYear() : java.time.LocalDate.now().getYear();
         String correlativo = String.format("AST-%d-%03d", anio, repo.count() + 1);
@@ -119,8 +123,10 @@ public class AsientoContableService {
         if (a.getHaber() == null || a.getHaber() <= 0)
             errores.add("El campo 'haber' debe ser mayor a 0. Ejemplo: 5000.00");
 
-        // Validar cuadre
-        if (a.getDebe() != null && a.getHaber() != null && Math.abs(a.getDebe() - a.getHaber()) > 0.01)
+        // Validar cuadre (BigDecimal evita errores de punto flotante)
+        if (a.getDebe() != null && a.getHaber() != null &&
+            BigDecimal.valueOf(a.getDebe()).subtract(BigDecimal.valueOf(a.getHaber())).abs()
+                .compareTo(new BigDecimal("0.01")) > 0)
             errores.add("El asiento no cuadra. Debe y Haber deben ser iguales. Debe: " + a.getDebe() + " ≠ Haber: " + a.getHaber());
 
         // Validar cuenta contable y su estado

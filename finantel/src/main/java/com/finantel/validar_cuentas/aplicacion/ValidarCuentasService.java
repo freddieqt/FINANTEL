@@ -17,13 +17,17 @@ public class ValidarCuentasService {
     public String validarCuenta(String codigo) {
         return repo.findByCodigo(codigo)
             .map(c -> "Activo".equalsIgnoreCase(c.getEstado())
+                    || "Activa".equalsIgnoreCase(c.getEstado())
                 ? "Cuenta válida y activa"
                 : "Cuenta inactiva — no permitida")
             .orElse("Cuenta no encontrada");
     }
 
     public List<CuentaContable> listarCuentasActivas() {
-        return repo.findByEstado("Activo");
+        return java.util.stream.Stream.concat(
+            repo.findByEstado("Activo").stream(),
+            repo.findByEstado("Activa").stream()
+        ).toList();
     }
     public List<CuentaContable> listar() {
         return repo.findAll();

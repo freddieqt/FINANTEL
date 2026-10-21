@@ -32,12 +32,15 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'com.github.jai-imageio:jai-imageio-core:1.4.0'
 	implementation 'com.mercadopago:sdk-java:3.7.0'
-	
+	testImplementation 'org.seleniumhq.selenium:selenium-java:3.7.0'
     runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
-
+	
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-webmvc-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.microsoft.playwright:playwright:1.47.0'
 }
 
 tasks.withType(JavaCompile) {
