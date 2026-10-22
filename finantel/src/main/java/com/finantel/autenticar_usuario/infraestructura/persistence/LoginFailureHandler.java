@@ -1,5 +1,6 @@
 package com.finantel.autenticar_usuario.infraestructura.persistence;
 
+import com.finantel.autenticar_usuario.aplicacion.GestorIntentos;
 import com.finantel.registrar_usuario.dominio.entity.Usuario;
 import com.finantel.registrar_usuario.dominio.repository.UsuarioRepository;
 
@@ -9,33 +10,24 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.stereotype.Component;
 import java.io.IOException;
-import java.util.Optional;
 
 @Component
 public class LoginFailureHandler implements AuthenticationFailureHandler {
 
     private final UsuarioRepository repo;
+    private final GestorIntentos gestor;
 
-    public LoginFailureHandler(UsuarioRepository repo) {
+    public LoginFailureHandler(UsuarioRepository repo, GestorIntentos gestor) {
         this.repo = repo;
+        this.gestor = gestor;
     }
 
     @Override
     public void onAuthenticationFailure(HttpServletRequest request,
-                                         HttpServletResponse response,
-                                         AuthenticationException exception) throws IOException {
+                                     HttpServletResponse response,
+                                     AuthenticationException exception) throws IOException {
         String email = request.getParameter("username");
-        Optional<Usuario> opt = repo.findByEmail(email);
-        if (opt.isPresent()) {
-            Usuario u = opt.get();
-            int intentos = u.getIntentos() == null ? 0 : u.getIntentos();
-            intentos++;
-            u.setIntentos(intentos);
-            if (intentos >= 3) {
-                u.setEstado("Bloqueado");
-            }
-            repo.save(u);
-        }
+        repo.findByEmail(email).ifPresent(gestor::registrarFallo);
         response.sendRedirect("/login?error=true");
     }
 }

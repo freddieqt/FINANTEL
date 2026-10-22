@@ -28,13 +28,16 @@ public class Usuario {
     @Column(name = "fecha_ultimo_acceso")
     private LocalDateTime fechaUltimoAcceso;
 
+    @Column(name = "fecha_bloqueo")
+    private LocalDateTime fechaBloqueo;
+
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private String password;
+
     // Getters
     public Integer getId() { return id; }
     public String getNombre() { return nombre; }
     public String getEmail() { return email; }
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    private String password;
-
     public String getPassword() { return password; }
     public String getRol() { return rol; }
     public String getEstado() { return estado; }
@@ -45,6 +48,7 @@ public class Usuario {
     public String getCargo() { return cargo; }
     public LocalDateTime getFechaRegistro() { return fechaRegistro; }
     public LocalDateTime getFechaUltimoAcceso() { return fechaUltimoAcceso; }
+    public LocalDateTime getFechaBloqueo() { return fechaBloqueo; }
 
     // Setters
     public void setId(Integer id) { this.id = id; }
@@ -60,5 +64,6 @@ public class Usuario {
     public void setCargo(String cargo) { this.cargo = cargo; }
     public void setFechaRegistro(LocalDateTime f) { this.fechaRegistro = f; }
     public void setFechaUltimoAcceso(LocalDateTime f) { this.fechaUltimoAcceso = f; }
+    public void setFechaBloqueo(LocalDateTime f) { this.fechaBloqueo = f; }
    
 }
