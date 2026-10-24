@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 public class GestorPermisos {
 
     public boolean tienePermiso(String rol, String accion) {
-        if (rol == null || accion == null) {
+        if (rol == null || accion == null || rol.isBlank() || accion.isBlank()) {
             return false;
         }
         switch (rol) {

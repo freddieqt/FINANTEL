@@ -38,7 +38,7 @@ public class UsuarioService {
 		if (u.getRol() == null || !rolesValidos.contains(u.getRol()))
 			errores.add(
 					"Rol inválido. Los roles válidos son: Administrador, Contador_General, Auditor, Personal_Autorizado");
-	if (u.getPassword() == null || u.getPassword().length() <= 6)
+	if (u.getPassword() == null || u.getPassword().length() < 6)
 			errores.add("La contraseña debe tener minimo 6 caracteres");
 		if (u.getDni() != null && !u.getDni().isBlank() && !u.getDni().matches("\\d{8}"))
 			errores.add("El DNI debe tener exactamente 8 numeros");

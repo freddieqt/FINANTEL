@@ -110,7 +110,16 @@ if (!stored) {
   };
   dbSave(stored);
 }
-
+async function duplicarAsientoExistente(id) {
+  try {
+    const r = await fetch(`/web/asientos/duplicar/${id}`, { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Asiento duplicado como COPIA', 'info');
+    setTimeout(() => location.reload(), 800);
+  } catch (e) {
+    showToast('No se pudo duplicar el asiento', 'error');
+  }
+}
 function anularAsiento(id) {	
   const modalId = 'modal-anular';
   let modal = document.getElementById(modalId);
@@ -270,8 +279,16 @@ function guardarAsiento() {
 		  fechaContable: document.getElementById('asiento-fecha-contable').value
         })
       })
-    .then(r => {
+    .then(async r => {
       if (r.ok) {
+		const creado = await r.json();
+		const archivo = document.getElementById('asiento-documento')?.files[0];
+		if (archivo && creado.id) {
+		  const fd = new FormData();
+		  fd.append('archivo', archivo);
+		  const up = await fetch(`/web/asientos/${creado.id}/documento`, { method: 'POST', credentials: 'include', body: fd });
+		  if (!up.ok) showToast('Asiento guardado, pero el documento no se adjuntó', 'error');
+		}
         renderAsientos();
         renderAlertas();   // ← AQUÍ
         closeModal('modal-asiento');
@@ -896,6 +913,7 @@ function renderUsuarios() {
   	fetch('/web/usuarios', { credentials: 'include' })
     .then(r => r.json())
     .then(usuarios => {
+				if (!Array.isArray(usuarios)) return;
       if (!usuarios.length) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin usuarios registrados</td></tr>';
         return;
@@ -972,6 +990,7 @@ function editarUsuario(id) {
 	fetch('/web/usuarios', { credentials: 'include' })
     .then(r => r.json())
     .then(usuarios => {
+				if (!Array.isArray(usuarios)) return;
       const u = usuarios.find(x => x.id === id);
       if (!u) return;
       const modalId = 'modal-edit-usuario';
@@ -1761,6 +1780,7 @@ function renderAuditLog() {
   fetch('/web/usuarios', { credentials: 'include' })
   .then(r => r.json())
   .then(usuarios => {
+		if (!Array.isArray(usuarios)) return;
     const sel = document.getElementById('aud-filtro-usuario');
     if (!sel) return;
 	sel.innerHTML = '<option>Todos los usuarios</option>';
@@ -1886,43 +1906,43 @@ function renderAsientos() {
       return;
     }
 
-    let totalDebe = 0, totalHaber = 0;
-    tbody.innerHTML = asientos.map(a => {
-      const debe  = parseFloat(a.debe)  || 0;
-      const haber = parseFloat(a.haber) || 0;
-      totalDebe  += debe;
-      totalHaber += haber;
-      const descuadrado = Math.abs(debe - haber) > 0.01 && debe > 0 && haber > 0;
-      const estBadge = a.estado==='Activo'?'b-green':a.estado==='Con error'?'b-red':a.estado==='Anulado'?'b-muted':'b-gold';
-      const aprobBadge = (descuadrado || a.estado==='Con error') ? 'b-red' : a.estado==='Activo' ? 'b-gold' : 'b-muted';
-      const aprobLabel = (descuadrado || a.estado==='Con error') ? '✗ Pendiente corrección' : a.estado==='Activo' ? 'Pendiente' : '—';
-	  const acciones = a.estado === 'Anulado'
-	  ? '<span class="badge b-muted">Anulado</span>'
-	  : `<button class="btn-outline btn-sm" onclick="verDetalleAsiento(${a.id})" title="Ver detalle">👁</button>
-	     <button class="btn-outline btn-sm" onclick="editarAsiento(${a.id})" title="Editar">✏</button>
-	     <button class="btn-outline btn-sm" onclick="duplicarAsientoExistente(${a.id})" title="Duplicar">📋</button>
-	     <button class="btn-danger btn-sm" onclick="anularAsiento(${a.id})" title="Anular">🗑</button>
-	     <a href="/web/cobros/${a.id}/enlace" target="_blank" class="btn-outline btn-sm">Cobrar</a>
-	     <a href="/web/cobros/${a.id}/verificar" target="_blank" class="btn-outline btn-sm">Verificar</a>`;v
-      return `<tr style="${descuadrado?'border-left:3px solid var(--red);':''}">
-        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${a.numeroCorrelativo || '—'}</td>
-        <td style="font-size:11px;color:var(--muted);">${a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleString('es-PE') : '—'}</td>
-        <td><span class="badge b-teal">${a.tipo || '—'}</span></td>
-        <td>${a.descripcion || '—'}</td>
-        <td class="tr" style="font-family:'IBM Plex Mono',monospace;${descuadrado?'color:var(--red);':''}">S/ ${debe.toFixed(2)}</td>
-        <td class="tr" style="font-family:'IBM Plex Mono',monospace;${descuadrado?'color:var(--red);':''}">S/ ${haber.toFixed(2)}</td>
-        <td><span class="badge ${estBadge}">${a.estado || '—'}</span></td>
-        <td><span class="badge ${aprobBadge}">${aprobLabel}</span></td>
-        <td>${a.usuario || '—'}</td>
-        <td style="display:flex;gap:4px;">${acciones}</td>
-      </tr>`;
-    }).join('');
+	  let totalDebe = 0, totalHaber = 0;
+	  tbody.innerHTML = asientos.map(a => {
+	    const debe  = parseFloat(a.debe)  || 0;
+	    const haber = parseFloat(a.haber) || 0;
+	    totalDebe  += debe;
+	    totalHaber += haber;
+	    const descuadrado = Math.abs(debe - haber) > 0.01 && debe > 0 && haber > 0;
+	    const estBadge = a.estado==='Activo'?'b-green':a.estado==='Con error'?'b-red':a.estado==='Anulado'?'b-muted':'b-gold';
+	    const aprobBadge = (descuadrado || a.estado==='Con error') ? 'b-red' : a.estado==='Activo' ? 'b-gold' : 'b-muted';
+	    const aprobLabel = (descuadrado || a.estado==='Con error') ? '✗ Pendiente corrección' : a.estado==='Activo' ? 'Pendiente' : '—';
+	    const acciones = a.estado === 'Anulado'
+	      ? '<span class="badge b-muted">Anulado</span>'
+	      : `<button class="btn-outline btn-sm" onclick="verDetalleAsiento(${a.id})" title="Ver detalle">👁</button>
+	         <button class="btn-outline btn-sm" onclick="editarAsiento(${a.id})" title="Editar">✏</button>
+	         <button class="btn-outline btn-sm" onclick="duplicarAsientoExistente(${a.id})" title="Duplicar">📋</button>
+	         <button class="btn-danger btn-sm" onclick="anularAsiento(${a.id})" title="Anular">🗑</button>
+	         <a href="/web/cobros/${a.id}/enlace" target="_blank" class="btn-outline btn-sm">Cobrar</a>
+	         <a href="/web/cobros/${a.id}/verificar" target="_blank" class="btn-outline btn-sm">Verificar</a>`;
+	    return `<tr style="${descuadrado?'border-left:3px solid var(--red);':''}">
+	      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${a.numeroCorrelativo || '—'}</td>
+	      <td style="font-size:11px;color:var(--muted);">${a.fechaRegistro ? new Date(a.fechaRegistro).toLocaleString('es-PE') : '—'}</td>
+	      <td><span class="badge b-teal">${a.tipo || '—'}</span></td>
+	      <td>${a.descripcion || '—'}</td>
+	      <td class="tr" style="font-family:'IBM Plex Mono',monospace;${descuadrado?'color:var(--red);':''}">S/ ${debe.toFixed(2)}</td>
+	      <td class="tr" style="font-family:'IBM Plex Mono',monospace;${descuadrado?'color:var(--red);':''}">S/ ${haber.toFixed(2)}</td>
+	      <td><span class="badge ${estBadge}">${a.estado || '—'}</span></td>
+	      <td><span class="badge ${aprobBadge}">${aprobLabel}</span></td>
+	      <td>${a.usuario || '—'}</td>
+	      <td style="display:flex;gap:4px;">${acciones}</td>
+	    </tr>`;
+	  }).join('');
 
     // Resumen inferior
     const resumen = document.getElementById('asientos-resumen');
     if (resumen) {
       const fmt = v => 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2});
-      const descuadrados = asientos.filter(a => Math.abs((parseFloat(a.debe)||0) - (parseFloat(a.haber)||0)) > 0.01 && parseFloat(a.debe) > 0 && parseFloat(a.haber) > 0).length;
+            const descuadrados = asientos.filter(a => Math.abs((parseFloat(a.debe)||0) - (parseFloat(a.haber)||0)) > 0.01 && parseFloat(a.debe) > 0 && parseFloat(a.haber) > 0).length;
       
       const diferencia = Math.abs(totalDebe - totalHaber);
       const alertaDif  = diferencia > 0.01 
@@ -1941,14 +1961,15 @@ function renderAsientos() {
         ${alertaDif}`;
     }
   })
-  .catch(() => {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--red);">Error cargando asientos</td></tr>';
+  .catch(e => {
+  console.error('ERROR ASIENTOS:', e);
   });
 
   // Cargar usuarios
   fetch('/web/usuarios', { credentials: 'include' })
   .then(r => r.json())
   .then(usuarios => {
+		if (!Array.isArray(usuarios)) return;
     const sel = document.getElementById('f-usuario');
     if (!sel) return;
     sel.innerHTML = '<option value="Todos">Todos</option>';

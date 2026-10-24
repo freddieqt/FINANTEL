@@ -6,6 +6,6 @@ import org.springframework.stereotype.Component;
 public class ImportarDatosExcelConfig {
 
     public boolean esFormatoValido(String nombre) {
-        return nombre != null && (nombre.endsWith(".xlsx") || nombre.endsWith(".xls"));
+        return nombre != null && (nombre.endsWith(".xlsx") || nombre.endsWith(".xls") || nombre.endsWith(".csv"));
     }
 }

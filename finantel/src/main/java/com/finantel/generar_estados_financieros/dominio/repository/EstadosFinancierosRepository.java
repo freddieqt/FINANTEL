@@ -13,7 +13,7 @@ public interface EstadosFinancierosRepository extends JpaRepository<AsientoConta
 		        cc.descripcion,
 		        cc.clasificacion,
 		        CASE 
-		            WHEN cc.tipo = 'Debito'  THEN ISNULL(SUM(a.debe), 0) - ISNULL(SUM(a.haber), 0)
+		            WHEN cc.tipo IN ('Debito', 'D\u00e9bito') THEN ISNULL(SUM(a.debe), 0) - ISNULL(SUM(a.haber), 0)
 		            WHEN cc.tipo = 'Credito' THEN ISNULL(SUM(a.haber), 0) - ISNULL(SUM(a.debe), 0)
 		            ELSE 0
 		        END AS saldo
@@ -34,8 +34,8 @@ public interface EstadosFinancierosRepository extends JpaRepository<AsientoConta
 		        cc.descripcion,
 		        cc.clasificacion,
 		        CASE 
-		            WHEN cc.tipo = 'Debito'  THEN ISNULL(SUM(a.debe), 0) - ISNULL(SUM(a.haber), 0)
-		            WHEN cc.tipo = 'Credito' THEN ISNULL(SUM(a.haber), 0) - ISNULL(SUM(a.debe), 0)
+		            WHEN cc.tipo IN ('Debito', 'D\u00e9bito') THEN ISNULL(SUM(a.debe), 0) - ISNULL(SUM(a.haber), 0)
+		            WHEN cc.tipo IN ('Credito', 'Cr\u00e9dito') THEN ISNULL(SUM(a.haber), 0) - ISNULL(SUM(a.debe), 0)
 		            ELSE 0
 		        END AS saldo
 		    FROM AsientosContables a

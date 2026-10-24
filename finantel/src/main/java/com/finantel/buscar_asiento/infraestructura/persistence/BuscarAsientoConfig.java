@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class BuscarAsientoConfig {
 
-    public boolean esFiltroValido(String filtro) {
-        return filtro != null && !filtro.isEmpty();
-    }
+	public boolean esFiltroValido(String filtro) {
+	    return filtro != null && !filtro.isBlank();
+	}
 }

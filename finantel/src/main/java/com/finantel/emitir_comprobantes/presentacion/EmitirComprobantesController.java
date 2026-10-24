@@ -57,7 +57,8 @@ public class EmitirComprobantesController {
         comprobante.setNumero(abstractComprobante.getSerie() + "-" + System.currentTimeMillis());
         comprobante.setTipo(abstractComprobante.getTipo());
         comprobante.setCliente("Cliente FINANTEL");
-        comprobante.setMonto(0.00);
+        comprobante.setFecha(java.time.LocalDate.now());
+        comprobante.setMonto(100.00);
 
         // 3. Guarda en BD usando el usuario autenticado
         service.emitir(comprobante, principal.getName());

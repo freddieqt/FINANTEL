@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 @Service
 public class ConciliacionBancariaService {
@@ -37,13 +38,16 @@ public class ConciliacionBancariaService {
             "sistema", "Conciliación bancaria", "MovimientosBancarios",
             null, estado
         );
-        return Map.of(
-            "archivo", nombreArchivo,
-            "totalAsientos", totalAsientos,
-            "totalBanco", totalBanco,
-            "diferencia", totalBanco - totalAsientos,
-            "estado", estado
-        );
+
+        String archivoFinal = (nombreArchivo != null && !nombreArchivo.trim().isEmpty()) ? nombreArchivo : "archivo_por_defecto.xlsx";
+
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("archivo", archivoFinal);
+        resultado.put("totalAsientos", totalAsientos);
+        resultado.put("totalBanco", totalBanco);
+        resultado.put("diferencia", totalBanco - totalAsientos);
+        resultado.put("estado", estado);
+        return resultado;
     }
 
     public List<MovimientoBancario> listarMovimientos() {

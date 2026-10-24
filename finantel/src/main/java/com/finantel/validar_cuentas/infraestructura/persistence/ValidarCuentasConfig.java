@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ValidarCuentasConfig {
 
-    public boolean esCuentaActiva(String estado) {
-        return "Activo".equalsIgnoreCase(estado);
-    }
+	public boolean esCuentaActiva(String estado) {
+	    return "Activo".equalsIgnoreCase(estado) || "Activa".equalsIgnoreCase(estado);
+	}
 }

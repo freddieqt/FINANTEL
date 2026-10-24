@@ -1,11 +1,15 @@
 package com.finantel.detectar_inconsistencias.infraestructura.persistence;
 
 import org.springframework.stereotype.Component;
+import java.math.BigDecimal;
 
 @Component
 public class InconsistenciaConfig {
 
     public boolean estaBalanceado(Double debe, Double haber) {
-        return Math.abs(debe - haber) <= 0.01;
+        return BigDecimal.valueOf(debe)
+            .subtract(BigDecimal.valueOf(haber))
+            .abs()
+            .compareTo(new BigDecimal("0.01")) <= 0;
     }
 }

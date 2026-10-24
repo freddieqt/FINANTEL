@@ -40,7 +40,7 @@ class CU02AutenticarUsuarioIT {
     @Autowired
     private JdbcTemplate jdbc;
 
-    private static final String EMAIL = "prueba@finantel.pe";
+    private static final String EMAIL = "itprueba@finantel.pe";
     private static final String PASSWORD = "clave123";
 
     private void crearUsuario(String estado) {

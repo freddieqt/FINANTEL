@@ -34,7 +34,7 @@ public class GestorIntentos {
     public void registrarFallo(Usuario u) {
         int intentos = (u.getIntentos() == null ? 0 : u.getIntentos()) + 1;
         u.setIntentos(intentos);
-        if (intentos >= MAX_INTENTOS) {
+        if (intentos >= MAX_INTENTOS && !"Bloqueado".equalsIgnoreCase(u.getEstado())) {
             u.setEstado("Bloqueado");
             u.setFechaBloqueo(LocalDateTime.now());
         }

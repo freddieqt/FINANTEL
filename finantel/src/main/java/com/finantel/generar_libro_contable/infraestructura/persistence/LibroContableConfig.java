@@ -6,6 +6,6 @@ import org.springframework.stereotype.Component;
 public class LibroContableConfig {
 
     public boolean esPeriodoValido(String periodo) {
-        return periodo != null && !periodo.isEmpty();
+        return periodo != null && !periodo.isBlank();
     }
 }

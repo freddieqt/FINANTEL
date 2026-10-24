@@ -1,7 +1,7 @@
 package com.finantel.autenticar_usuario.presentacion;
 
 import org.springframework.scheduling.annotation.Scheduled;
-
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.servlet.http.HttpSession;
@@ -30,6 +30,7 @@ import com.finantel.gestionar_periodos.dominio.entity.PeriodoContable;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import org.jspecify.annotations.NonNull;
+
 @RestController
 @RequestMapping("/web")
 public class WebController {
@@ -44,6 +45,9 @@ public class WebController {
 	private final TipoCambioSbsService tipoCambioService;
 	private final JdbcTemplate jdbcTemplate;
 	private final GenerarEstadosFinancierosService estadosService;
+
+	@Autowired
+	private com.finantel.adjuntar_documento.aplicacion.DocumentoAsientoService documentoAsientoService;
 
 	public WebController(AsientoContableService asientoService, AuditoriaService auditoriaService,
 			UsuarioService usuarioService, EmitirComprobantesService comprobanteService,
@@ -181,6 +185,7 @@ public class WebController {
 	        return ResponseEntity.status(500).body(Map.of("error", "Error interno: " + e.getMessage()));
 	    }
 	}
+
 	@GetMapping("/resultados")
 	public ResponseEntity<?> getResultados() {
 	    try {
@@ -227,30 +232,25 @@ public class WebController {
 	    double efectivoFinal     = efectivoInicio + netoTotal;
 
 	    java.util.Map<String, Object> flujo = new java.util.LinkedHashMap<>();
-	    // Operativas
 	    flujo.put("entradas",          entradas);
 	    flujo.put("pagoProveedores",   pagoProveedores);
 	    flujo.put("pagoGastos",        pagoGastos);
 	    flujo.put("pagoTributos",      pagoTributos);
 	    flujo.put("flujoOperativo",    flujoOperativo);
-	    // Inversión
 	    flujo.put("compraActivos",     compraActivos);
 	    flujo.put("ventaActivos",      ventaActivos);
 	    flujo.put("flujoInversion",    flujoInversion);
-	    // Financiamiento
 	    flujo.put("prestamosRecibidos",  prestamosRecibidos);
 	    flujo.put("pagoPrestamos",       pagoPrestamos);
 	    flujo.put("aportesCapital",      aportesCapital);
 	    flujo.put("flujoFinanciamiento", flujoFinanciamiento);
-	    // Totales
 	    flujo.put("netoTotal",         netoTotal);
 	    flujo.put("efectivoInicio",    efectivoInicio);
 	    flujo.put("efectivoFinal",     efectivoFinal);
-	    // Para el gráfico (compatibilidad)
 	    flujo.put("entradas",  entradas);
 	    flujo.put("salidas",   pagoGastos + pagoProveedores + pagoTributos);
 	    flujo.put("neto",      flujoOperativo);
-	 // Evolución mensual real
+
 	    String sqlMes1 = "SELECT ISNULL(SUM(debe-haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '1%' AND estado='Activo' AND MONTH(fecha_registro)=MONTH(DATEADD(MONTH,-2,GETDATE()))";
 	    String sqlMes2 = "SELECT ISNULL(SUM(debe-haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '1%' AND estado='Activo' AND MONTH(fecha_registro)=MONTH(DATEADD(MONTH,-1,GETDATE()))";
 	    String sqlMes3 = "SELECT ISNULL(SUM(debe-haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '1%' AND estado='Activo' AND MONTH(fecha_registro)=MONTH(GETDATE())";
@@ -280,7 +280,7 @@ public class WebController {
 	    }
 
 	    double utilidad2026  = ingresos - gastos;
-	    double transReservas = reservas * 0.10; // 10% transferencia a reservas
+	    double transReservas = reservas * 0.10; 
 	    double distUtilidades = dividendos;
 	    double saldoFinalCapital   = capital;
 	    double saldoFinalReservas  = reservas + transReservas;
@@ -290,17 +290,14 @@ public class WebController {
 
 	    java.util.Map<String, Object> pat = new java.util.LinkedHashMap<>();
 	    pat.put("resAcumulado", resAcumulado);
-	    // Saldo inicial
 	    pat.put("capital",          capital);
 	    pat.put("reservas",         reservas);
 	    pat.put("utilidad",         utilidad2026);
 	    pat.put("totalInicial",     saldoInicialTotal);
-	    // Movimientos
 	    pat.put("aportes",          0.0);
 	    pat.put("utilidad2026",     utilidad2026);
 	    pat.put("distUtilidades",   -distUtilidades);
 	    pat.put("transReservas",    transReservas);
-	    // Saldo final
 	    pat.put("saldoFinalCapital",   saldoFinalCapital);
 	    pat.put("saldoFinalReservas",  saldoFinalReservas);
 	    pat.put("saldoFinalUtilidad",  saldoFinalUtilidad);
@@ -370,7 +367,6 @@ public class WebController {
 	    ratios.put("eficienciaOper",    Math.round(eo  * 10.0)  / 10.0);
 	    ratios.put("periodoCobro",      Math.round(ppc * 10.0)  / 10.0);
 	    
-	 // Morosidad
 	    String sqlCartera2 = "SELECT ISNULL(SUM(debe-haber),0) FROM AsientosContables WHERE cuenta_contable='1301' AND estado='Activo'";
 		double cartera2 = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlCartera2, Double.class), 0.0);
@@ -378,7 +374,6 @@ public class WebController {
 	    ratios.put("morosidad", Math.round(morosidad2 * 100.0) / 100.0);
 	    
 	    return ResponseEntity.ok(ratios);
-	    
 	}
 
 	@GetMapping("/costos")
@@ -391,14 +386,12 @@ public class WebController {
 			                 || a.getCuentaContable().startsWith("6")))
 			    .collect(java.util.stream.Collectors.toList());
 
-	    // Obtener presupuestos reales de la BD
 	    String sqlPres = "SELECT centro_costo, monto FROM Presupuestos WHERE estado='Activo'";
 	    java.util.Map<String, Double> presupuestos = new java.util.LinkedHashMap<>();
 	    jdbcTemplate.queryForList(sqlPres).forEach(row -> 
 	        presupuestos.put((String) row.get("centro_costo"), 
 	                        ((Number) row.get("monto")).doubleValue()));
 
-	    // Calcular ejecutado por centro
 	    java.util.Map<String, Double> ejecutados = new java.util.LinkedHashMap<>();
 	    for (AsientoContable a : asientos) {
 	        String centro = a.getCentroCosto();
@@ -406,7 +399,6 @@ public class WebController {
 	        ejecutados.put(centro, ejecutados.getOrDefault(centro, 0.0) + debe);
 	    }
 
-	    // Combinar presupuesto + ejecutado
 	    java.util.Map<String, java.util.Map<String, Object>> resultado = new java.util.LinkedHashMap<>();
 	    presupuestos.forEach((centro, presupuesto) -> {
 	        double ejecutado = ejecutados.getOrDefault(centro, 0.0);
@@ -420,9 +412,14 @@ public class WebController {
 	}
 
 	@PostMapping("/comprobantes")
-	public ResponseEntity<?> crearComprobante(@RequestBody Comprobante c, Principal principal) {
-		comprobanteService.emitir(c, principal.getName());
-		return ResponseEntity.ok().build();
+	@ResponseBody
+	public ResponseEntity<?> emitirComprobante(@RequestBody Comprobante comprobante, Principal principal) {
+		try {
+			comprobanteService.emitir(comprobante, principal.getName());
+			return ResponseEntity.ok().build();
+		} catch (RuntimeException e) {
+			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+		}
 	}
 
 	@GetMapping("/alertas")
@@ -450,7 +447,6 @@ public class WebController {
 
 		double liquidez = pasivoCorriente != 0 ? activoCorriente / pasivoCorriente : 0;
 
-		// Saldo real de Caja (cuenta 1011)
 		String sqlCaja = "SELECT ISNULL(SUM(debe)-SUM(haber),0) FROM AsientosContables WHERE cuenta_contable='1011' AND estado='Activo'";
 		double flujoCaja = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlCaja, Double.class), 0.0);
@@ -483,7 +479,7 @@ public class WebController {
 			a.put("detalle", "Gastos superan ingresos en S/ " + String.format("%.2f", gastos - ingresos));
 			alertas.add(a);
 		}
-		// Asientos sin cuenta contable
+
 		long sinCuenta = asientoService.listar().stream()
 				.filter(a -> "Activo".equals(a.getEstado()) && 
 						   (a.getCuentaContable() == null || a.getCuentaContable().isBlank()))
@@ -496,7 +492,7 @@ public class WebController {
 			a.put("detalle", sinCuenta + " asiento(s) no tienen cuenta contable asignada");
 			alertas.add(a);
 		}
-		// Usuarios bloqueados
+
 		String sqlBloqueados = "SELECT COUNT(*) FROM Usuarios WHERE estado = 'Bloqueado'";
 		int bloqueados = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlBloqueados, Integer.class), 0);
@@ -507,7 +503,7 @@ public class WebController {
 		    a.put("detalle", bloqueados + " usuario(s) bloqueados por intentos fallidos");
 		    alertas.add(a);
 		}
-		// Cuentas por pagar
+
 		String sqlPagar = "SELECT ISNULL(SUM(haber-debe),0) FROM AsientosContables WHERE cuenta_contable IN ('4101','4201') AND estado='Activo'";
 		double ctasPagar = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlPagar, Double.class), 0.0);
@@ -552,7 +548,6 @@ public class WebController {
 		String usuario = org.springframework.security.core.context.SecurityContextHolder.getContext()
 				.getAuthentication().getName();
 
-		// Obtener tamaño real de la BD
 		String sqlSize = "SELECT CAST(SUM(size) * 8.0 / 1024 AS DECIMAL(10,2)) as tamMB FROM sys.database_files";
 		Double tamMB = jdbcTemplate.queryForObject(sqlSize, Double.class);
 		String tamanio = tamMB + " MB";
@@ -566,7 +561,6 @@ public class WebController {
 	@ResponseBody
 	public Map<String, Object> getDashboard() {
 		Map<String, Object> kpis = new HashMap<>();
-		// Mes actual y 2 anteriores
 		String sqlMes1Ing = "SELECT ISNULL(SUM(haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '5%' AND estado='Activo' AND MONTH(fecha_registro)=MONTH(GETDATE()) AND YEAR(fecha_registro)=YEAR(GETDATE())";
 		String sqlMes2Ing = "SELECT ISNULL(SUM(haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '5%' AND estado='Activo' AND MONTH(fecha_registro)=MONTH(DATEADD(MONTH,-1,GETDATE())) AND YEAR(fecha_registro)=YEAR(DATEADD(MONTH,-1,GETDATE()))";
 		String sqlMes3Ing = "SELECT ISNULL(SUM(haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '5%' AND estado='Activo' AND MONTH(fecha_registro)=MONTH(DATEADD(MONTH,-2,GETDATE())) AND YEAR(fecha_registro)=YEAR(DATEADD(MONTH,-2,GETDATE()))";
@@ -582,6 +576,7 @@ public class WebController {
 		kpis.put("gasEnero", jdbcTemplate.queryForObject(sqlMes3Gas, Double.class));
 		kpis.put("gasFebrero", jdbcTemplate.queryForObject(sqlMes2Gas, Double.class));
 		kpis.put("gasMarzo", jdbcTemplate.queryForObject(sqlMes1Gas, Double.class));
+		
 		String sqlAsientos = "SELECT COUNT(*) FROM AsientosContables WHERE MONTH(fecha_registro) = MONTH(GETDATE()) AND YEAR(fecha_registro) = YEAR(GETDATE())";
 		kpis.put("asientosMes", jdbcTemplate.queryForObject(sqlAsientos, Integer.class));
 
@@ -593,7 +588,7 @@ public class WebController {
 
 		String sqlGastos = "SELECT ISNULL(SUM(debe), 0) FROM AsientosContables WHERE cuenta_contable LIKE '4%' AND estado = 'Activo'";
 		kpis.put("gastos", jdbcTemplate.queryForObject(sqlGastos, Double.class));
-		// Liquidez (Activo corriente / Pasivo corriente)
+
 		String sqlLiquidez = "SELECT ISNULL(SUM(debe-haber),0) FROM AsientosContables WHERE cuenta_contable LIKE '1%' AND estado='Activo'";
 		double activoCorriente = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlLiquidez, Double.class), 0.0);
@@ -605,11 +600,9 @@ public class WebController {
 		double liquidez = pasivoCorriente != 0 ? activoCorriente / pasivoCorriente : 0;
 		kpis.put("liquidez", Math.round(liquidez * 100.0) / 100.0);
 
-		// Ctas por Cobrar (cuenta 1011)
 		String sqlCxC = "SELECT ISNULL(SUM(debe),0) FROM AsientosContables WHERE cuenta_contable='1301' AND estado='Activo'";
 		kpis.put("ctasCobrar", jdbcTemplate.queryForObject(sqlCxC, Double.class));
 
-		// ROE (Utilidad / Patrimonio)
 		String sqlPatrimonio = "SELECT ISNULL(SUM(haber-debe),0) FROM AsientosContables WHERE cuenta_contable LIKE '5%' AND estado='Activo'";
 		double patrimonio = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlPatrimonio, Double.class), 0.0);
@@ -619,14 +612,13 @@ public class WebController {
 		double roe = patrimonio != 0 ? (utilidad2 / patrimonio) * 100 : 0;
 		kpis.put("roe", Math.round(roe * 100.0) / 100.0);
 		
-		// Morosidad = créditos vencidos / cartera total
 		String sqlCartera = "SELECT ISNULL(SUM(debe-haber),0) FROM AsientosContables WHERE cuenta_contable='1301' AND estado='Activo'";
 		double cartera = java.util.Objects.requireNonNullElse(
 				jdbcTemplate.queryForObject(sqlCartera, Double.class), 0.0);
 		double morosidad = cartera != 0 ? (500.0 / cartera) * 100 : 0;
 		kpis.put("morosidad", Math.round(morosidad * 100.0) / 100.0);
 
-		return kpis; // ← el return siempre al final
+		return kpis;
 	}
 
 	@PostMapping("/asientos")
@@ -634,13 +626,26 @@ public class WebController {
 		try {
 			a.setUsuario(principal.getName());
 			asientoService.crear(a);
-			return ResponseEntity.ok().build();
+			return ResponseEntity.ok(java.util.Map.of("id", a.getId()));
 		} catch (org.springframework.dao.DataIntegrityViolationException e) {
 			return ResponseEntity.badRequest().body(Map.of("error", "La cuenta contable '" + a.getCuentaContable()
 					+ "' no existe en el Plan de Cuentas. Cuentas válidas: 1011, 2011, 3011, 4011, 4501, 5011"));
 		} catch (RuntimeException e) {
 			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
 		}
+	}
+
+	@PostMapping("/asientos/{id}/documento")
+	@ResponseBody
+	public ResponseEntity<?> adjuntarDocumento(@PathVariable Integer id,
+	                                           @RequestParam("archivo") org.springframework.web.multipart.MultipartFile archivo,
+	                                           Principal principal) throws java.io.IOException {
+	    try {
+	        documentoAsientoService.adjuntar(id, archivo.getOriginalFilename(), archivo.getBytes(), principal.getName());
+	        return ResponseEntity.ok().build();
+	    } catch (RuntimeException e) {
+	        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+	    }
 	}
 
 	@PostMapping("/tipocambio/actualizar")
@@ -766,6 +771,7 @@ public class WebController {
 		resp.put("filas", resultado);
 		return ResponseEntity.ok(resp);
 	}
+
 	@GetMapping("/asientos/{id}/partidas")
 	public ResponseEntity<?> getPartidas(@PathVariable("id") Integer id) {
 	    String sql = "SELECT p.id, p.cuenta_contable, cc.descripcion, p.descripcion as glosa, p.debe, p.haber " +
