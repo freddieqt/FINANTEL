@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="panel-errores" id="panel-errores" class="panel">
+  <div class="sec-hdr">
+    <div><div class="sec-title">Inconsistencias y Errores</div><div class="sec-sub">ASIENTOS CON ERRORES O DOCUMENTACIÓN FALTANTE</div></div>
+  </div>
+  <div class="alert alert-warn">⚡ El sistema lista automáticamente asientos con errores o sin documentos adjuntos. Alertas enviadas al Contador General.</div>
+
+  <!-- Resumen KPIs -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:18px;">
+    <div class="kpi-card"><div class="kpi-lbl">Asientos Revisados</div><div class="kpi-val" id="inc-revisados">—</div><div class="kpi-d up">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Inconsistencias</div><div class="kpi-val" id="inc-total" style="color:var(--red)">—</div><div class="kpi-d down">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Documentación Faltante</div><div class="kpi-val" id="inc-docfalt" style="color:#fbbf24">—</div><div class="kpi-d warn">—</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">Errores Pendientes</div><div class="kpi-val" id="inc-pendientes" style="color:var(--red)">—</div><div class="kpi-d down">—</div></div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-hdr"><div class="card-title">📋 Detalle de Inconsistencias</div></div>
+    <div class="card-body-0" style="overflow-x:auto;">
+      <table class="tbl" style="table-layout:fixed;width:100%;">
+        <thead><tr>
+          <th style="width:12%;">N° Asiento</th>
+          <th style="width:10%;">Fecha</th>
+          <th style="width:20%;">Descripción</th>
+          <th style="width:15%;">Tipo Error</th>
+          <th style="width:12%;">Documentación</th>
+          <th style="width:10%;">Prioridad</th>
+          <th style="width:10%;">Estado</th>
+          <th style="width:11%;">Acción</th>
+        </tr></thead>
+        <tbody id="inc-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Qué detecta el sistema -->
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">🔍 Tipos de errores detectados automáticamente</div></div>
+    <div class="card-body">
+      <div class="three-col">
+        <div>
+          <div class="kpi-lbl" style="margin-bottom:8px;">Errores contables</div>
+          <div style="font-size:12px;color:var(--text);line-height:2;">
+            ⚖ Debe ≠ Haber<br>
+            🏷 Cuenta contable incorrecta<br>
+            📂 Asiento sin clasificar
+          </div>
+        </div>
+        <div>
+          <div class="kpi-lbl" style="margin-bottom:8px;">Documentación</div>
+          <div style="font-size:12px;color:var(--text);line-height:2;">
+            📄 Documentación faltante<br>
+            🔁 Comprobante duplicado<br>
+            📅 Periodo contable cerrado
+          </div>
+        </div>
+        <div>
+          <div class="kpi-lbl" style="margin-bottom:8px;">Estado actual</div>
+          <div id="inc-estado-sistema" style="font-size:12px;color:var(--green);line-height:2;">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
